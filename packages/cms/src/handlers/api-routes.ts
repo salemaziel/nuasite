@@ -238,17 +238,41 @@ const routeMap = new Map<string, RouteHandler>([
 			handleUpdateMarkdown(body, mw.getComponentDefinitions()),
 		(_result, body) => body.filePath,
 	),
-	post(
+	custom(
+		"POST",
 		"markdown/rename",
-		(body: Parameters<typeof handleRenameMarkdown>[0]) =>
-			handleRenameMarkdown(body),
-		(result) => result.newFilePath,
+		async ({ req, res, manifestWriter, contentDir, notifyContentChanged }) => {
+			const body =
+				await parseJsonBody<Parameters<typeof handleRenameMarkdown>[0]>(req);
+			const result = await handleRenameMarkdown(body);
+			if (result.success) {
+				manifestWriter.setCollectionDefinitions(
+					await scanCollections(contentDir),
+				);
+				if (notifyContentChanged && result.newFilePath) {
+					await notifyContentChanged(result.newFilePath);
+				}
+			}
+			sendJson(res, result, result.success ? 200 : 400);
+		},
 	),
-	postWithStatus(
+	custom(
+		"POST",
 		"markdown/create",
-		(body: Parameters<typeof handleCreateMarkdown>[0]) =>
-			handleCreateMarkdown(body),
-		(result) => result.filePath,
+		async ({ req, res, manifestWriter, contentDir, notifyContentChanged }) => {
+			const body =
+				await parseJsonBody<Parameters<typeof handleCreateMarkdown>[0]>(req);
+			const result = await handleCreateMarkdown(body);
+			if (result.success) {
+				manifestWriter.setCollectionDefinitions(
+					await scanCollections(contentDir),
+				);
+				if (notifyContentChanged && result.filePath) {
+					await notifyContentChanged(result.filePath);
+				}
+			}
+			sendJson(res, result, result.success ? 200 : 400);
+		},
 	),
 	custom(
 		"POST",
