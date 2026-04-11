@@ -299,10 +299,6 @@ const routeMap = new Map<string, RouteHandler>([
 					await scanCollections(contentDir),
 				);
 				if (notifyContentChanged && body.filePath) {
-					// Clear expectedDeletions so our 'unlink' emit isn't swallowed
-					// by the monkey-patched watcher (the natural chokidar event may
-					// arrive later — an extra unlink is harmless).
-					expectedDeletions.delete(fullPath);
 					await notifyContentChanged(body.filePath, "unlink");
 				}
 			} else {

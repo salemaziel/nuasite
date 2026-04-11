@@ -45,6 +45,7 @@ interface ViteDevServerLike {
 		on: (event: string, listener: (...args: any[]) => void) => any
 		removeListener: (event: string, listener: (...args: any[]) => void) => any
 		emit: (event: string, ...args: any[]) => boolean
+		rawListeners: (event: string) => ((...args: any[]) => void)[]
 	}
 }
 
@@ -137,7 +138,17 @@ export function createDevMiddleware(
 		const notifyContentChanged = async (filePath: string, event: 'change' | 'add' | 'unlink' = 'change'): Promise<void> => {
 			const fullPath = path.resolve(projectRoot, filePath)
 			const waiter = awaitNextContentStoreUpdate(3000)
-			server.watcher?.emit(event, fullPath)
+			if (event === 'unlink' && server.watcher) {
+				// Bypass the expectedDeletions monkey-patch on watcher.emit by
+				// calling unlink listeners directly. This ensures the glob loader's
+				// unlink handler fires while expectedDeletions keeps blocking the
+				// natural chokidar event (preventing a premature full-reload).
+				for (const listener of server.watcher.rawListeners('unlink')) {
+					listener.call(server.watcher, fullPath)
+				}
+			} else {
+				server.watcher?.emit(event, fullPath)
+			}
 			await waiter
 		}
 
