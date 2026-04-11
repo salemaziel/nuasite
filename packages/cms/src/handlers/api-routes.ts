@@ -52,8 +52,14 @@ export interface RouteContext {
 	 *
 	 * Awaiting this is important: returning success before the cache is fresh
 	 * causes the editor to reload the page into a stale render.
+	 *
+	 * @param event - `'change'` for existing files, `'add'` for newly created files.
+	 *   New files need `'add'` so the glob loader registers their render function.
 	 */
-	notifyContentChanged?: (filePath: string) => Promise<void>;
+	notifyContentChanged?: (
+		filePath: string,
+		event?: "change" | "add",
+	) => Promise<void>;
 }
 
 type RouteHandler = (ctx: RouteContext) => Promise<void>;
@@ -250,7 +256,7 @@ const routeMap = new Map<string, RouteHandler>([
 					await scanCollections(contentDir),
 				);
 				if (notifyContentChanged && result.newFilePath) {
-					await notifyContentChanged(result.newFilePath);
+					await notifyContentChanged(result.newFilePath, "add");
 				}
 			}
 			sendJson(res, result, result.success ? 200 : 400);
@@ -268,7 +274,7 @@ const routeMap = new Map<string, RouteHandler>([
 					await scanCollections(contentDir),
 				);
 				if (notifyContentChanged && result.filePath) {
-					await notifyContentChanged(result.filePath);
+					await notifyContentChanged(result.filePath, "add");
 				}
 			}
 			sendJson(res, result, result.success ? 200 : 400);
