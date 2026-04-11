@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { getProjectRoot } from './config'
-import { awaitNextContentStoreUpdate } from './content-invalidator'
+import { awaitNextContentStoreUpdate, invalidateContentCache, type ViteServerLike } from './content-invalidator'
 import { handleCmsApiRoute } from './handlers/api-routes'
 import { buildMapPattern, detectArrayPattern, extractArrayElementProps, parseInlineArrayName } from './handlers/array-ops'
 import {
@@ -150,6 +150,11 @@ export function createDevMiddleware(
 				server.watcher?.emit(event, fullPath)
 			}
 			await waiter
+			// Always invalidate the SSR module graph and broadcast full-reload
+			// after the data store has been updated. The data-store-watch plugin
+			// (fs.watch) is unreliable — on macOS/Linux, atomic renames can kill
+			// the watcher, leaving modules stale and the browser un-reloaded.
+			invalidateContentCache(server as unknown as ViteServerLike)
 		}
 
 		server.middlewares.use((req, res, next) => {
