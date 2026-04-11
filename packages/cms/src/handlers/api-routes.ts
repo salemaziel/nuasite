@@ -53,12 +53,14 @@ export interface RouteContext {
 	 * Awaiting this is important: returning success before the cache is fresh
 	 * causes the editor to reload the page into a stale render.
 	 *
-	 * @param event - `'change'` for existing files, `'add'` for newly created files.
-	 *   New files need `'add'` so the glob loader registers their render function.
+	 * @param event - `'change'` for existing files, `'add'` for newly created files,
+	 *   `'unlink'` for deleted files. New files need `'add'` so the glob loader
+	 *   registers their render function. Deleted files need `'unlink'` so the glob
+	 *   loader removes the entry from the data store.
 	 */
 	notifyContentChanged?: (
 		filePath: string,
-		event?: "change" | "add",
+		event?: "change" | "add" | "unlink",
 	) => Promise<void>;
 }
 
@@ -297,7 +299,11 @@ const routeMap = new Map<string, RouteHandler>([
 					await scanCollections(contentDir),
 				);
 				if (notifyContentChanged && body.filePath) {
-					await notifyContentChanged(body.filePath);
+					// Clear expectedDeletions so our 'unlink' emit isn't swallowed
+					// by the monkey-patched watcher (the natural chokidar event may
+					// arrive later — an extra unlink is harmless).
+					expectedDeletions.delete(fullPath);
+					await notifyContentChanged(body.filePath, "unlink");
 				}
 			} else {
 				expectedDeletions.delete(fullPath);

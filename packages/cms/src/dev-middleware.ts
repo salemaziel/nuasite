@@ -134,7 +134,7 @@ export function createDevMiddleware(
 		 * In that case no fs.watch event will ever fire, and 3 s is plenty of
 		 * budget before we give up and let the response through anyway.
 		 */
-		const notifyContentChanged = async (filePath: string, event: 'change' | 'add' = 'change'): Promise<void> => {
+		const notifyContentChanged = async (filePath: string, event: 'change' | 'add' | 'unlink' = 'change'): Promise<void> => {
 			const fullPath = path.resolve(projectRoot, filePath)
 			const waiter = awaitNextContentStoreUpdate(3000)
 			server.watcher?.emit(event, fullPath)
