@@ -29,6 +29,7 @@ interface SsrModuleNode {
 
 interface SsrModuleGraph {
 	getModuleById(id: string): SsrModuleNode | undefined
+	idToModuleMap: Map<string, SsrModuleNode>
 	invalidateModule(
 		mod: SsrModuleNode,
 		seen?: Set<SsrModuleNode>,
@@ -56,29 +57,51 @@ export interface ViteServerLike {
 // silently reduced `invalidateContentCache` to a no-op full-reload broadcast.
 const DATA_STORE_VIRTUAL_ID = '\0astro:data-layer-content'
 
+// Astro generates `.astro/content-modules.mjs` which maps file paths to
+// deferred render import functions. When a new content file is created, this
+// file is rewritten — but Vite doesn't watch `.astro/` so the cached SSR
+// module stays stale, causing `render(entry)` to throw
+// UnknownContentCollectionError for new entries.
+const CONTENT_MODULES_SUFFIX = 'content-modules.mjs'
+
 /**
- * Invalidate the SSR `astro:data-layer-content` virtual module and every
- * module that (transitively) imports it. After this returns, the next request
- * that imports any of these modules will re-execute and read fresh content.
+ * Invalidate the SSR `astro:data-layer-content` virtual module, the
+ * `content-modules.mjs` render mapping, and every module that (transitively)
+ * imports either of them. After this returns, the next request that imports
+ * any of these modules will re-execute and read fresh content.
  *
  * Also broadcasts `full-reload` so any connected browser refreshes.
  */
 export function invalidateContentCache(server: ViteServerLike): void {
 	const ssr = server.environments.ssr
+	const seen = new Set<SsrModuleNode>()
+	const ts = Date.now()
+
+	const walk = (mod: SsrModuleNode) => {
+		if (seen.has(mod)) return
+		seen.add(mod)
+		ssr.moduleGraph.invalidateModule(mod, seen, ts, true)
+		for (const importer of mod.importers) {
+			walk(importer)
+		}
+	}
+
+	// 1. Invalidate the data store virtual module + importers
 	const dataStoreMod = ssr.moduleGraph.getModuleById(DATA_STORE_VIRTUAL_ID)
 	if (dataStoreMod) {
-		const seen = new Set<SsrModuleNode>()
-		const ts = Date.now()
-		const walk = (mod: SsrModuleNode) => {
-			if (seen.has(mod)) return
-			seen.add(mod)
-			ssr.moduleGraph.invalidateModule(mod, seen, ts, true)
-			for (const importer of mod.importers) {
-				walk(importer)
-			}
-		}
 		walk(dataStoreMod)
 	}
+
+	// 2. Invalidate content-modules.mjs (render mapping for deferred entries).
+	//    The module is stored in the graph under its resolved file path, so we
+	//    scan by suffix rather than exact ID.
+	for (const mod of ssr.moduleGraph.idToModuleMap.values()) {
+		if (mod.id?.endsWith(CONTENT_MODULES_SUFFIX)) {
+			walk(mod)
+			break
+		}
+	}
+
 	ssr.hot.send('astro:content-changed', {})
 	server.environments.client.hot.send({ type: 'full-reload', path: '*' })
 }
