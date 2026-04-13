@@ -358,6 +358,7 @@ async function mergeRedirects(dir: URL, logger: { info: (msg: string) => void })
 }
 
 export { n } from './field-types'
+export type { DateHints, ImageHints, NumberHints, TextareaHints, TextHints } from './field-types'
 export { createContemberStorageAdapter as contemberMedia } from './media/contember'
 export { createLocalStorageAdapter as localMedia } from './media/local'
 export { createS3StorageAdapter as s3Media } from './media/s3'
@@ -393,6 +394,7 @@ export type {
 	ComponentProp,
 	ContentConstraints,
 	FieldDefinition,
+	FieldHints,
 	FieldType,
 	ImageMetadata,
 	JsonLdEntry,

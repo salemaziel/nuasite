@@ -3,7 +3,7 @@ import path from 'node:path'
 import { isMap, isPair, isScalar, parse as parseYaml, parseDocument } from 'yaml'
 import { getProjectRoot } from './config'
 import { slugifyHref } from './shared'
-import type { CollectionDefinition, CollectionEntryInfo, FieldDefinition, FieldType } from './types'
+import type { CollectionDefinition, CollectionEntryInfo, FieldDefinition, FieldHints, FieldType } from './types'
 
 /** Regex patterns for type inference */
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/
@@ -31,7 +31,6 @@ const SIDEBAR_FIELD_NAMES = new Set([
 	'author',
 ])
 
-/** Directive pattern: # @position <value> or # @group <value> */
 /** Matches `@position <value>` or `@group <value>` in YAML comment text (# already stripped by parser) */
 const DIRECTIVE_PATTERN = /^\s*@(position|group)\s+(.+)$/
 
@@ -400,10 +399,6 @@ async function parseContentConfigSchemaBlocks(): Promise<Array<{ collectionName:
 			const fullPath = path.join(projectRoot, configPath)
 			const content = await fs.readFile(fullPath, 'utf-8')
 
-			const collectionBlocks = content.matchAll(
-				/(?:const\s+(\w+)\s*=\s*)?defineCollection\s*\(\s*\{[\s\S]*?schema\s*:\s*z\.object\s*\(\s*\{([\s\S]*?)\}\s*\)/g,
-			)
-
 			// Map variable names to collection names from exports
 			const varToName = new Map<string, string>()
 			const exportMatch = content.match(/export\s+const\s+collections\s*=\s*\{([\s\S]*?)\}/)
@@ -414,13 +409,32 @@ async function parseContentConfigSchemaBlocks(): Promise<Array<{ collectionName:
 				}
 			}
 
+			// Find schema block starts via regex, then extract bodies with brace counting
+			// to correctly handle nested objects like n.number({ min: 1, max: 100 })
+			const schemaStart = /(?:const\s+(\w+)\s*=\s*)?defineCollection\s*\(\s*\{[\s\S]*?schema\s*:\s*(?:z|n)\.object\s*\(\s*\{/g
 			const blocks: Array<{ collectionName: string; schemaBody: string }> = []
-			for (const block of collectionBlocks) {
-				const varName = block[1]
-				const schemaBody = block[2]!
+
+			let match
+			while ((match = schemaStart.exec(content)) !== null) {
+				const varName = match[1]
 				const collectionName = varName ? varToName.get(varName) : undefined
 				if (!collectionName) continue
-				blocks.push({ collectionName, schemaBody })
+
+				// Brace-balanced extraction: the regex consumed the opening {,
+				// so start at depth 1 and scan forward for the matching }
+				const bodyStart = match.index + match[0].length
+				let depth = 1
+				let i = bodyStart
+				while (i < content.length && depth > 0) {
+					if (content[i] === '{') depth++
+					else if (content[i] === '}') depth--
+					i++
+				}
+
+				if (depth === 0) {
+					// i is one past the matching }, so body is [bodyStart, i-1)
+					blocks.push({ collectionName, schemaBody: content.slice(bodyStart, i - 1) })
+				}
 			}
 
 			if (blocks.length > 0) return blocks
@@ -455,7 +469,7 @@ function parseContentConfigReferences(
 }
 
 /** Valid field type names exported by `n` helper from @nuasite/cms */
-const FIELD_HELPER_TYPES = new Set(['image', 'url', 'email', 'color', 'date', 'datetime', 'time', 'textarea'])
+const FIELD_HELPER_TYPES = new Set(['text', 'number', 'image', 'url', 'email', 'color', 'date', 'datetime', 'time', 'textarea'])
 
 /**
  * Parse the content config file to extract explicit field type hints:
@@ -498,6 +512,54 @@ function parseContentConfigFieldTypes(
 		}
 	}
 	return result
+}
+
+/**
+ * Parse the content config to find `.orderBy('asc'|'desc')` markers on fields.
+ * Matches patterns like `fieldName: n.number().orderBy('asc')`.
+ * Returns a map: collectionName → { field, direction }.
+ */
+function parseContentConfigOrderBy(
+	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
+): Map<string, { field: string; direction: 'asc' | 'desc' }> {
+	const result = new Map<string, { field: string; direction: 'asc' | 'desc' }>()
+	for (const { collectionName, schemaBody } of schemaBlocks) {
+		const match = schemaBody.match(/(\w+)\s*:.*\.orderBy\s*\(\s*(?:['"](\w+)['"])?\s*\)/)
+		if (match) {
+			const direction = match[2] === 'desc' ? 'desc' as const : 'asc' as const
+			result.set(collectionName, { field: match[1]!, direction })
+		}
+	}
+	return result
+}
+
+/**
+ * Apply orderBy configuration: set the field name and direction on the definition, then re-sort entries.
+ */
+function applyCollectionOrderBy(
+	collections: Record<string, CollectionDefinition>,
+	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
+): void {
+	const orderByFields = parseContentConfigOrderBy(schemaBlocks)
+	for (const [collectionName, { field: fieldName, direction }] of orderByFields) {
+		const def = collections[collectionName]
+		if (!def) continue
+		def.orderBy = fieldName
+		def.orderDirection = direction
+		if (def.entries && def.entries.length > 1) {
+			const dir = direction === 'desc' ? -1 : 1
+			def.entries.sort((a, b) => {
+				const aVal = a.data?.[fieldName]
+				const bVal = b.data?.[fieldName]
+				if (aVal == null && bVal == null) return 0
+				if (aVal == null) return 1
+				if (bVal == null) return -1
+				if (typeof aVal === 'number' && typeof bVal === 'number') return (aVal - bVal) * dir
+				if (aVal instanceof Date && bVal instanceof Date) return (aVal.getTime() - bVal.getTime()) * dir
+				return String(aVal).localeCompare(String(bVal)) * dir
+			})
+		}
+	}
 }
 
 /**
@@ -548,6 +610,82 @@ function applyConfigFieldTypes(
 			if (override.options) {
 				field.options = override.options
 			}
+		}
+	}
+}
+
+/** All recognized hint keys */
+const VALID_HINT_KEYS = new Set(['min', 'max', 'step', 'placeholder', 'maxLength', 'minLength', 'rows', 'accept'])
+/** Subset of hint keys that take numeric values */
+const NUMERIC_HINT_KEYS = new Set(['min', 'max', 'step', 'maxLength', 'minLength', 'rows'])
+
+/**
+ * Parse `n.type({ key: value, ... })` options objects from schema blocks.
+ * Returns a map: collectionName → fieldName → FieldHints.
+ */
+function parseContentConfigFieldHints(
+	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
+): Map<string, Map<string, FieldHints>> {
+	const result = new Map<string, Map<string, FieldHints>>()
+
+	for (const { collectionName, schemaBody } of schemaBlocks) {
+		const fields = new Map<string, FieldHints>()
+
+		// Match: fieldName: n.helperName({ ...options })
+		const fieldMatches = schemaBody.matchAll(/(\w+)\s*:\s*n\.\w+\s*\(\s*\{([\s\S]*?)}\s*\)/g)
+		for (const m of fieldMatches) {
+			const fieldName = m[1]!
+			const optionsBody = m[2]!
+			const raw: Record<string, string | number> = {}
+
+			// Extract key-value pairs from the options body
+			const kvMatches = optionsBody.matchAll(/(\w+)\s*:\s*(?:"([^"]*)"|'([^']*)'|(-?[\d.]+))/g)
+			for (const kv of kvMatches) {
+				const key = kv[1]!
+				if (!VALID_HINT_KEYS.has(key)) continue
+				const strValue = kv[2] ?? kv[3]
+				const numValue = kv[4]
+
+				if (numValue != null && NUMERIC_HINT_KEYS.has(key)) {
+					raw[key] = Number(numValue)
+				} else if (strValue != null) {
+					if (NUMERIC_HINT_KEYS.has(key)) {
+						const parsed = Number(strValue)
+						raw[key] = Number.isNaN(parsed) ? strValue : parsed
+					} else {
+						raw[key] = strValue
+					}
+				}
+			}
+			const hints = raw as FieldHints
+
+			if (Object.keys(hints).length > 0) {
+				fields.set(fieldName, hints)
+			}
+		}
+
+		if (fields.size > 0) {
+			result.set(collectionName, fields)
+		}
+	}
+	return result
+}
+
+/**
+ * Apply field hints from content config parsing to scanned collections.
+ */
+function applyConfigFieldHints(
+	collections: Record<string, CollectionDefinition>,
+	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
+): void {
+	const configHints = parseContentConfigFieldHints(schemaBlocks)
+	for (const [collectionName, fieldHints] of configHints) {
+		const def = collections[collectionName]
+		if (!def) continue
+		for (const [fieldName, hints] of fieldHints) {
+			const field = def.fields.find(f => f.name === fieldName)
+			if (!field) continue
+			field.hints = hints
 		}
 	}
 }
@@ -787,12 +925,14 @@ export async function scanCollections(contentDir: string = 'src/content'): Promi
 		// Content directory doesn't exist or isn't readable
 	}
 
-	// Post-scan: apply explicit type hints, detect references, and derived fields
+	// Post-scan: apply explicit type hints, field hints, detect references, derived fields, and ordering
 	const schemaBlocks = await parseContentConfigSchemaBlocks()
 	filterFieldsBySchema(collections, schemaBlocks)
 	applyConfigFieldTypes(collections, schemaBlocks)
+	applyConfigFieldHints(collections, schemaBlocks)
 	await detectReferenceFields(collections, schemaBlocks)
 	detectDerivedHrefFields(collections)
+	applyCollectionOrderBy(collections, schemaBlocks)
 
 	return collections
 }

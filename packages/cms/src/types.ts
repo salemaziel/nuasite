@@ -242,6 +242,18 @@ export type FieldType =
 	| 'object'
 	| 'reference'
 
+/** Editor hints for enhanced field rendering (extracted from `n.*()` options in content config) */
+export interface FieldHints {
+	min?: number | string
+	max?: number | string
+	step?: number
+	placeholder?: string
+	maxLength?: number
+	minLength?: number
+	rows?: number
+	accept?: string
+}
+
 /** Definition of a single field in a collection's schema */
 export interface FieldDefinition {
 	/** Field name as it appears in frontmatter */
@@ -270,6 +282,8 @@ export interface FieldDefinition {
 	hidden?: boolean
 	/** Source field name this field is derived from (e.g. categoryHref derived from category) */
 	derivedFrom?: string
+	/** Editor hints for enhanced field rendering */
+	hints?: FieldHints
 }
 
 /** Per-entry metadata for collection browsing */
@@ -304,6 +318,10 @@ export interface CollectionDefinition {
 	fileExtension: 'md' | 'mdx' | 'json' | 'yaml' | 'yml'
 	/** Per-entry metadata for browsing */
 	entries?: CollectionEntryInfo[]
+	/** Frontmatter field name to sort entries by (detected from `.orderBy()` in content config) */
+	orderBy?: string
+	/** Sort direction for orderBy field */
+	orderDirection?: 'asc' | 'desc'
 }
 
 /** Manifest metadata for versioning and conflict detection */
