@@ -21,15 +21,6 @@ export interface RouteContext {
 	manifestWriter: ManifestWriter
 	contentDir: string
 	mediaAdapter?: MediaStorageAdapter
-	/**
-	 * Triggered after a content file (markdown / data collection) is written so
-	 * the dev middleware can synchronously refresh Astro's content layer and
-	 * invalidate Vite's SSR module cache before responding to the client.
-	 *
-	 * Awaiting this is important: returning success before the cache is fresh
-	 * causes the editor to reload the page into a stale render.
-	 */
-	notifyContentChanged?: (filePath: string) => Promise<void>
 }
 
 type RouteHandler = (ctx: RouteContext) => Promise<void>
@@ -113,12 +104,9 @@ const routeMap = new Map<string, RouteHandler>([
 		}
 		sendJson(res, result)
 	}),
-	custom('POST', 'markdown/update', async ({ req, res, manifestWriter, notifyContentChanged }) => {
+	custom('POST', 'markdown/update', async ({ req, res, manifestWriter }) => {
 		const body = await parseJsonBody<Parameters<typeof handleUpdateMarkdown>[0]>(req)
 		const result = await handleUpdateMarkdown(body, manifestWriter.getComponentDefinitions())
-		if (result.success && notifyContentChanged) {
-			await notifyContentChanged(body.filePath)
-		}
 		sendJson(res, result)
 	}),
 	post('markdown/rename', (body: Parameters<typeof handleRenameMarkdown>[0]) => handleRenameMarkdown(body)),
@@ -238,9 +226,8 @@ export async function handleCmsApiRoute(
 	manifestWriter: ManifestWriter,
 	contentDir: string,
 	mediaAdapter?: MediaStorageAdapter,
-	notifyContentChanged?: (filePath: string) => Promise<void>,
 ): Promise<void> {
-	const ctx: RouteContext = { req, res, route, manifestWriter, contentDir, mediaAdapter, notifyContentChanged }
+	const ctx: RouteContext = { req, res, route, manifestWriter, contentDir, mediaAdapter }
 
 	// Exact match lookup
 	const handler = routeMap.get(`${req.method}:${route}`)
