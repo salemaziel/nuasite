@@ -233,7 +233,13 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 	if (isCreating) {
 		const slug = slugify(newName.trim())
 		return (
-			<div class="p-3 bg-white/5 border border-white/15 rounded-cms-md space-y-3">
+			<form
+				class="p-3 bg-white/5 border border-white/15 rounded-cms-md space-y-3"
+				onSubmit={(e) => {
+					e.preventDefault()
+					handleCreate()
+				}}
+			>
 				<div class="flex items-center justify-between">
 					<span class="text-[12px] font-medium text-white/70">Create new entry</span>
 					{options.length > 0 && (
@@ -251,6 +257,7 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 					value={newName}
 					onInput={(e) => setNewName((e.target as HTMLInputElement).value)}
 					placeholder="Enter name..."
+					required
 					class="w-full px-4 py-2.5 bg-white/10 border border-white/20 text-[13px] text-white placeholder:text-white/40 outline-none focus:border-white/40 focus:ring-1 focus:ring-white/10 transition-all rounded-cms-md"
 					autoFocus
 				/>
@@ -279,15 +286,13 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 						Cancel
 					</button>
 					<button
-						type="button"
-						onClick={handleCreate}
-						disabled={!newName.trim()}
+						type="submit"
 						class="px-3 py-1.5 text-[12px] bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover rounded-cms-md transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 					>
 						Create
 					</button>
 				</div>
-			</div>
+			</form>
 		)
 	}
 

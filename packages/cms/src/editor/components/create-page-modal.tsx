@@ -206,7 +206,12 @@ function NewPageForm() {
 	}
 
 	return (
-		<>
+		<form
+			onSubmit={(e) => {
+				e.preventDefault()
+				handleSubmit()
+			}}
+		>
 			<ModalHeader title="New Blank Page" onBack={() => setCreatePageMode('pick')} onClose={() => resetCreatePageState()} />
 			<div class="p-5 space-y-4">
 				<Field label="Title">
@@ -215,6 +220,7 @@ function NewPageForm() {
 						value={form.title}
 						onInput={(e) => form.handleTitleChange((e.target as HTMLInputElement).value)}
 						placeholder="My New Page"
+						required
 						class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-cms-md text-white placeholder:text-white/30 focus:outline-none focus:border-cms-primary/50"
 						autoFocus
 						data-cms-ui
@@ -229,6 +235,7 @@ function NewPageForm() {
 							value={form.slug}
 							onInput={(e) => form.handleSlugChange((e.target as HTMLInputElement).value)}
 							placeholder="my-new-page"
+							required
 							class="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-cms-md text-white placeholder:text-white/30 focus:outline-none focus:border-cms-primary/50"
 							data-cms-ui
 						/>
@@ -253,16 +260,15 @@ function NewPageForm() {
 			<ModalFooter>
 				<CancelButton onClick={() => resetCreatePageState()} />
 				<button
-					type="button"
-					onClick={handleSubmit}
-					disabled={!canSubmit}
+					type="submit"
+					disabled={!!form.slugError || form.slugChecking || form.isSubmitting}
 					class="px-5 py-2.5 text-sm font-medium rounded-cms-pill transition-colors cursor-pointer bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover disabled:opacity-40 disabled:cursor-not-allowed"
 					data-cms-ui
 				>
 					Create Page
 				</button>
 			</ModalFooter>
-		</>
+		</form>
 	)
 }
 
@@ -302,7 +308,12 @@ function DuplicatePageForm() {
 	}
 
 	return (
-		<>
+		<form
+			onSubmit={(e) => {
+				e.preventDefault()
+				handleSubmit()
+			}}
+		>
 			<ModalHeader title="Duplicate Page" onBack={() => setCreatePageMode('pick')} onClose={() => resetCreatePageState()} />
 			<div class="p-5 space-y-4">
 				<Field label="Source Page">
@@ -312,6 +323,7 @@ function DuplicatePageForm() {
 							setSourcePath((e.target as HTMLSelectElement).value)
 							form.resetSlugManual()
 						}}
+						required
 						class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-cms-md text-white focus:outline-none focus:border-cms-primary/50"
 						data-cms-ui
 					>
@@ -342,6 +354,7 @@ function DuplicatePageForm() {
 							value={form.slug}
 							onInput={(e) => form.handleSlugChange((e.target as HTMLInputElement).value)}
 							placeholder="new-page-slug"
+							required
 							class="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-cms-md text-white placeholder:text-white/30 focus:outline-none focus:border-cms-primary/50"
 							data-cms-ui
 						/>
@@ -363,16 +376,15 @@ function DuplicatePageForm() {
 			<ModalFooter>
 				<CancelButton onClick={() => resetCreatePageState()} />
 				<button
-					type="button"
-					onClick={handleSubmit}
-					disabled={!canSubmit}
+					type="submit"
+					disabled={!!form.slugError || form.slugChecking || form.isSubmitting}
 					class="px-5 py-2.5 text-sm font-medium rounded-cms-pill transition-colors cursor-pointer bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover disabled:opacity-40 disabled:cursor-not-allowed"
 					data-cms-ui
 				>
 					Duplicate Page
 				</button>
 			</ModalFooter>
-		</>
+		</form>
 	)
 }
 
