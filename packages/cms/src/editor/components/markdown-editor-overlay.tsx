@@ -375,11 +375,22 @@ export function MarkdownEditorOverlay() {
 			onMouseDown={stopPropagation}
 			onClick={stopPropagation}
 		>
-			<div
+			<form
 				class={`bg-cms-dark rounded-cms-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/10 w-full max-h-[90vh] flex flex-col ${
 					hasSidebar ? 'max-w-6xl' : 'max-w-4xl'
 				}`}
 				data-cms-ui
+				onSubmit={(e) => {
+					e.preventDefault()
+					if (isCreateMode) {
+						handleCreate()
+					} else {
+						const currentContent = currentMarkdownPage.value?.content
+						if (currentContent !== undefined) {
+							handleSave(currentContent)
+						}
+					}
+				}}
 			>
 				{/* Header */}
 				<div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
@@ -495,9 +506,8 @@ export function MarkdownEditorOverlay() {
 						{isCreateMode
 							? (
 								<button
-									type="button"
-									onClick={handleCreate}
-									disabled={isSaving || !(page.frontmatter.title as string)?.trim()}
+									type="submit"
+									disabled={isSaving}
 									class="px-4 py-2 text-sm bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover rounded-cms-pill transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
 									data-cms-ui
 								>
@@ -507,13 +517,7 @@ export function MarkdownEditorOverlay() {
 							)
 							: (
 								<button
-									type="button"
-									onClick={() => {
-										const currentContent = currentMarkdownPage.value?.content
-										if (currentContent !== undefined) {
-											handleSave(currentContent)
-										}
-									}}
+									type="submit"
 									disabled={isSaving}
 									class="px-4 py-2 text-sm bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover rounded-cms-pill transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
 									data-cms-ui
@@ -577,7 +581,7 @@ export function MarkdownEditorOverlay() {
 						/>
 					)}
 				</div>
-			</div>
+			</form>
 		</div>
 	)
 }

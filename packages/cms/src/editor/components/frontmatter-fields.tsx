@@ -394,7 +394,7 @@ export function SchemaFrontmatterField({
 	value,
 	onChange,
 }: SchemaFrontmatterFieldProps) {
-	const label = formatFieldLabel(field.name)
+	const label = field.required ? `${formatFieldLabel(field.name)} *` : formatFieldLabel(field.name)
 	const hints = field.hints
 
 	switch (field.type) {
@@ -410,6 +410,7 @@ export function SchemaFrontmatterField({
 					minLength={hints?.minLength as number | undefined}
 					onChange={(v) => onChange(v)}
 					inputType={field.type === 'text' ? undefined : field.type}
+					required={field.required}
 				/>
 			)
 
@@ -425,6 +426,7 @@ export function SchemaFrontmatterField({
 							onChange(url)
 						})
 					}}
+					required={field.required}
 				/>
 			)
 
@@ -435,6 +437,7 @@ export function SchemaFrontmatterField({
 					value={(value as string) ?? ''}
 					placeholder={getPlaceholder(field)}
 					onChange={(v) => onChange(v)}
+					required={field.required}
 				/>
 			)
 
@@ -448,6 +451,7 @@ export function SchemaFrontmatterField({
 						placeholder={hints?.placeholder ?? getPlaceholder(field)}
 						rows={hints?.rows ?? 3}
 						maxLength={hints?.maxLength as number | undefined}
+						required={field.required}
 						class="px-3 py-2 text-sm bg-white/10 border border-white/20 rounded-cms-sm text-white placeholder-white/30 focus:outline-none focus:border-white/40 resize-none"
 						data-cms-ui
 					/>
@@ -465,6 +469,7 @@ export function SchemaFrontmatterField({
 						value={(value as string) ?? ''}
 						min={hints?.min != null ? String(hints.min) : undefined}
 						max={hints?.max != null ? String(hints.max) : undefined}
+						required={field.required}
 						onInput={(e) => onChange((e.target as HTMLInputElement).value)}
 						class="px-3 py-2 text-sm bg-white/10 border border-white/20 rounded-cms-sm text-white focus:outline-none focus:border-white/40"
 						data-cms-ui
@@ -482,6 +487,7 @@ export function SchemaFrontmatterField({
 					max={typeof hints?.max === 'number' ? hints.max : undefined}
 					step={hints?.step}
 					onChange={(v) => onChange(v ?? 0)}
+					required={field.required}
 				/>
 			)
 
@@ -505,6 +511,7 @@ export function SchemaFrontmatterField({
 						label: opt,
 					}))}
 					onChange={(v) => onChange(v)}
+					required={field.required}
 				/>
 			)
 
@@ -517,6 +524,7 @@ export function SchemaFrontmatterField({
 					placeholder={`Select ${label.toLowerCase()}...`}
 					options={refOptions}
 					onChange={(v) => onChange(v)}
+					required={field.required}
 				/>
 			)
 		}

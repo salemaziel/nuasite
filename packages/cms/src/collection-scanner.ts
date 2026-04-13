@@ -562,17 +562,8 @@ function applyCollectionOrderBy(
 	}
 }
 
-/**
- * Extract all top-level field names from a schema body string.
- * Matches `fieldName:` patterns at the start of lines within z.object({...}).
- */
-function extractSchemaFieldNames(schemaBody: string): Set<string> {
-	const names = new Set<string>()
-	for (const m of schemaBody.matchAll(/^\s*(\w+)\s*:/gm)) {
-		names.add(m[1]!)
-	}
-	return names
-}
+/** Match `fieldName:` patterns at the start of lines within a schema body. */
+const SCHEMA_FIELD_PATTERN = /^\s*(\w+)\s*:/gm
 
 /**
  * When a content config schema exists, filter scanned fields to only include
@@ -586,32 +577,43 @@ function filterFieldsBySchema(
 	for (const { collectionName, schemaBody } of schemaBlocks) {
 		const def = collections[collectionName]
 		if (!def) continue
-		const schemaNames = extractSchemaFieldNames(schemaBody)
+		const schemaNames = new Set<string>()
+		for (const m of schemaBody.matchAll(SCHEMA_FIELD_PATTERN)) {
+			schemaNames.add(m[1]!)
+		}
 		if (schemaNames.size === 0) continue
 		def.fields = def.fields.filter(f => schemaNames.has(f.name))
 	}
 }
 
 /**
- * Apply field type overrides from config parsing to scanned collections.
+ * Apply a parsed per-field config map to scanned collection definitions.
  */
+function applyPerFieldConfig<T>(
+	collections: Record<string, CollectionDefinition>,
+	configMap: Map<string, Map<string, T>>,
+	apply: (field: FieldDefinition, value: T) => void,
+): void {
+	for (const [collectionName, fieldMap] of configMap) {
+		const def = collections[collectionName]
+		if (!def) continue
+		for (const [fieldName, value] of fieldMap) {
+			const field = def.fields.find(f => f.name === fieldName)
+			if (!field) continue
+			apply(field, value)
+		}
+	}
+}
+
+/** Apply field type overrides from config parsing to scanned collections. */
 function applyConfigFieldTypes(
 	collections: Record<string, CollectionDefinition>,
 	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
 ): void {
-	const configTypes = parseContentConfigFieldTypes(schemaBlocks)
-	for (const [collectionName, fieldTypes] of configTypes) {
-		const def = collections[collectionName]
-		if (!def) continue
-		for (const [fieldName, override] of fieldTypes) {
-			const field = def.fields.find(f => f.name === fieldName)
-			if (!field) continue
-			field.type = override.type
-			if (override.options) {
-				field.options = override.options
-			}
-		}
-	}
+	applyPerFieldConfig(collections, parseContentConfigFieldTypes(schemaBlocks), (field, override) => {
+		field.type = override.type
+		if (override.options) field.options = override.options
+	})
 }
 
 /** All recognized hint keys */
@@ -672,22 +674,53 @@ function parseContentConfigFieldHints(
 }
 
 /**
- * Apply field hints from content config parsing to scanned collections.
+ * Parse required/optional status from schema blocks.
+ * In Zod, fields are required by default. `.optional()`, `.nullable()`, and `.default(...)` make them not required.
  */
+function parseContentConfigRequiredFields(
+	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
+): Map<string, Map<string, boolean>> {
+	const result = new Map<string, Map<string, boolean>>()
+
+	for (const { collectionName, schemaBody } of schemaBlocks) {
+		const fields = new Map<string, boolean>()
+
+		const fieldMatches = [...schemaBody.matchAll(SCHEMA_FIELD_PATTERN)]
+		for (let i = 0; i < fieldMatches.length; i++) {
+			const fieldName = fieldMatches[i]![1]!
+			const start = fieldMatches[i]!.index!
+			const end = i + 1 < fieldMatches.length ? fieldMatches[i + 1]!.index! : schemaBody.length
+			const fieldSource = schemaBody.slice(start, end)
+
+			const isOptional = /\.(optional|nullable|default)\s*\(/.test(fieldSource)
+			fields.set(fieldName, !isOptional)
+		}
+
+		if (fields.size > 0) {
+			result.set(collectionName, fields)
+		}
+	}
+	return result
+}
+
+/** Apply field hints from content config parsing to scanned collections. */
 function applyConfigFieldHints(
 	collections: Record<string, CollectionDefinition>,
 	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
 ): void {
-	const configHints = parseContentConfigFieldHints(schemaBlocks)
-	for (const [collectionName, fieldHints] of configHints) {
-		const def = collections[collectionName]
-		if (!def) continue
-		for (const [fieldName, hints] of fieldHints) {
-			const field = def.fields.find(f => f.name === fieldName)
-			if (!field) continue
-			field.hints = hints
-		}
-	}
+	applyPerFieldConfig(collections, parseContentConfigFieldHints(schemaBlocks), (field, hints) => {
+		field.hints = hints
+	})
+}
+
+/** Apply required/optional status from content config to scanned collections. */
+function applyConfigRequiredFields(
+	collections: Record<string, CollectionDefinition>,
+	schemaBlocks: Array<{ collectionName: string; schemaBody: string }>,
+): void {
+	applyPerFieldConfig(collections, parseContentConfigRequiredFields(schemaBlocks), (field, required) => {
+		field.required = required
+	})
 }
 
 /**
@@ -925,11 +958,12 @@ export async function scanCollections(contentDir: string = 'src/content'): Promi
 		// Content directory doesn't exist or isn't readable
 	}
 
-	// Post-scan: apply explicit type hints, field hints, detect references, derived fields, and ordering
+	// Post-scan: apply explicit type hints, field hints, required status, detect references, derived fields, and ordering
 	const schemaBlocks = await parseContentConfigSchemaBlocks()
 	filterFieldsBySchema(collections, schemaBlocks)
 	applyConfigFieldTypes(collections, schemaBlocks)
 	applyConfigFieldHints(collections, schemaBlocks)
+	applyConfigRequiredFields(collections, schemaBlocks)
 	await detectReferenceFields(collections, schemaBlocks)
 	detectDerivedHrefFields(collections)
 	applyCollectionOrderBy(collections, schemaBlocks)

@@ -45,9 +45,12 @@ export interface TextFieldProps {
 	isDirty?: boolean
 	onReset?: () => void
 	inputType?: string
+	required?: boolean
 }
 
-export function TextField({ label, value, placeholder, maxLength, minLength, onChange, isDirty, onReset, inputType = 'text' }: TextFieldProps) {
+export function TextField(
+	{ label, value, placeholder, maxLength, minLength, onChange, isDirty, onReset, inputType = 'text', required }: TextFieldProps,
+) {
 	return (
 		<div class="space-y-1.5">
 			<FieldLabel label={label} isDirty={isDirty} onReset={onReset} />
@@ -57,6 +60,7 @@ export function TextField({ label, value, placeholder, maxLength, minLength, onC
 				placeholder={placeholder}
 				maxLength={maxLength}
 				minLength={minLength}
+				required={required}
 				onInput={(e) => onChange((e.target as HTMLInputElement).value)}
 				class={cn(
 					'w-full px-3 py-2 bg-white/10 border rounded-cms-sm text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 transition-colors',
@@ -82,9 +86,10 @@ export interface ImageFieldProps {
 	onBrowse: () => void
 	isDirty?: boolean
 	onReset?: () => void
+	required?: boolean
 }
 
-export function ImageField({ label, value, placeholder, onChange, onBrowse, isDirty, onReset }: ImageFieldProps) {
+export function ImageField({ label, value, placeholder, onChange, onBrowse, isDirty, onReset, required }: ImageFieldProps) {
 	const hasImage = !!value && value.length > 0
 
 	return (
@@ -114,6 +119,7 @@ export function ImageField({ label, value, placeholder, onChange, onBrowse, isDi
 					type="text"
 					value={value ?? ''}
 					placeholder={placeholder}
+					required={required}
 					onInput={(e) => onChange((e.target as HTMLInputElement).value)}
 					class={cn(
 						'flex-1 min-w-0 px-3 py-2 bg-white/10 border rounded-cms-sm text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 transition-colors',
@@ -147,9 +153,10 @@ export interface ColorFieldProps {
 	onChange: (value: string) => void
 	isDirty?: boolean
 	onReset?: () => void
+	required?: boolean
 }
 
-export function ColorField({ label, value, placeholder, onChange, isDirty, onReset }: ColorFieldProps) {
+export function ColorField({ label, value, placeholder, onChange, isDirty, onReset, required }: ColorFieldProps) {
 	const colorValue = value || '#000000'
 	// Validate hex for the native picker (must be #rrggbb)
 	const isValidHex = /^#[0-9a-fA-F]{6}$/.test(colorValue)
@@ -170,6 +177,7 @@ export function ColorField({ label, value, placeholder, onChange, isDirty, onRes
 					type="text"
 					value={value ?? ''}
 					placeholder={placeholder ?? '#000000'}
+					required={required}
 					onInput={(e) => onChange((e.target as HTMLInputElement).value)}
 					class={cn(
 						'flex-1 px-3 py-2 bg-white/10 border rounded-cms-sm text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 transition-colors',
@@ -278,9 +286,10 @@ export interface NumberFieldProps {
 	onChange: (value: number | undefined) => void
 	isDirty?: boolean
 	onReset?: () => void
+	required?: boolean
 }
 
-export function NumberField({ label, value, placeholder, min, max, step, onChange, isDirty, onReset }: NumberFieldProps) {
+export function NumberField({ label, value, placeholder, min, max, step, onChange, isDirty, onReset, required }: NumberFieldProps) {
 	return (
 		<div class="space-y-1.5">
 			<FieldLabel label={label} isDirty={isDirty} onReset={onReset} />
@@ -291,6 +300,7 @@ export function NumberField({ label, value, placeholder, min, max, step, onChang
 				min={min}
 				max={max}
 				step={step}
+				required={required}
 				onInput={(e) => {
 					const val = (e.target as HTMLInputElement).value
 					onChange(val === '' ? undefined : Number(val))
@@ -336,9 +346,10 @@ export interface ComboBoxFieldProps {
 	onChange: (value: string) => void
 	isDirty?: boolean
 	onReset?: () => void
+	required?: boolean
 }
 
-export function ComboBoxField({ label, value, placeholder, options, onChange, isDirty, onReset }: ComboBoxFieldProps) {
+export function ComboBoxField({ label, value, placeholder, options, onChange, isDirty, onReset, required }: ComboBoxFieldProps) {
 	const [query, setQuery] = useState('')
 	const [isOpen, setIsOpen] = useState(false)
 	const [highlightedIndex, setHighlightedIndex] = useState(-1)
@@ -378,6 +389,13 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 	}, [onChange])
 
 	const handleKeyDown = useCallback((e: KeyboardEvent) => {
+		if (e.key === 'Enter') {
+			e.preventDefault()
+			if (isOpen && highlightedIndex >= 0 && filtered[highlightedIndex]) {
+				selectOption(filtered[highlightedIndex]!.value)
+			}
+			return
+		}
 		if (!isOpen || filtered.length === 0) return
 		if (e.key === 'ArrowDown') {
 			e.preventDefault()
@@ -385,9 +403,6 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault()
 			setHighlightedIndex(i => Math.max(i - 1, 0))
-		} else if (e.key === 'Enter' && highlightedIndex >= 0) {
-			e.preventDefault()
-			selectOption(filtered[highlightedIndex]!.value)
 		} else if (e.key === 'Escape') {
 			setIsOpen(false)
 		}
@@ -411,6 +426,7 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 				type="text"
 				value={value ?? ''}
 				placeholder={placeholder}
+				required={required}
 				onInput={handleInput}
 				onFocus={handleFocus}
 				onBlur={handleBlur}
