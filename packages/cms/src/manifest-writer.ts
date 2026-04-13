@@ -126,6 +126,21 @@ export class ManifestWriter {
 	}
 
 	/**
+	 * Clear all entry pathnames on collection definitions.
+	 * Called when route files change so stale pathnames from addPage() don't
+	 * point to routes that no longer exist.
+	 */
+	clearCollectionPathnames(): void {
+		for (const def of Object.values(this.collectionDefinitions)) {
+			if (def.entries) {
+				for (const entry of def.entries) {
+					entry.pathname = undefined
+				}
+			}
+		}
+	}
+
+	/**
 	 * Get the manifest path for a given page
 	 * Places manifest next to the page: /about -> /about.json, / -> /index.json
 	 */

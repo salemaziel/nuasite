@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite'
-import { expectedDeletions } from './dev-middleware'
+import { expectedDeletions, invalidateCollectionRoutesCache } from './dev-middleware'
 import type { ManifestWriter } from './manifest-writer'
 import { markFileDirty } from './source-finder'
 import type { CmsMarkerOptions, ComponentDefinition } from './types'
@@ -53,6 +53,11 @@ export function createVitePlugin(context: VitePluginContext): Plugin[] {
 		if (INDEXED_EXTENSIONS.test(filePath)) {
 			markFileDirty(filePath)
 		}
+		// Invalidate cached collection routes when a dynamic route file changes
+		if (filePath.includes('/src/pages/') && filePath.includes('[')) {
+			invalidateCollectionRoutesCache()
+			manifestWriter.clearCollectionPathnames()
+		}
 	}
 
 	// Intercept Vite's file watcher to:
@@ -77,10 +82,17 @@ export function createVitePlugin(context: VitePluginContext): Plugin[] {
 			// processes them. We use prependListener so our handler runs first.
 			const origEmit = watcher.emit.bind(watcher)
 			watcher.emit = ((event: string, filePath: string, ...args: any[]) => {
-				if ((event === 'unlink' || event === 'unlinkDir') && expectedDeletions.has(filePath)) {
-					expectedDeletions.delete(filePath)
-					// Swallow the event — don't let Vite/Astro see it
-					return true
+				if (event === 'unlink' || event === 'unlinkDir') {
+					if (expectedDeletions.has(filePath)) {
+						expectedDeletions.delete(filePath)
+						// Swallow the event — don't let Vite/Astro see it
+						return true
+					}
+					// Invalidate cached collection routes when a dynamic route file is deleted
+					if (filePath.includes('/src/pages/') && filePath.includes('[')) {
+						invalidateCollectionRoutesCache()
+						manifestWriter.clearCollectionPathnames()
+					}
 				}
 				return origEmit(event, filePath, ...args)
 			}) as typeof watcher.emit

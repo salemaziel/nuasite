@@ -11,7 +11,6 @@ import {
 	selectBrowserCollection,
 	selectedBrowserCollection,
 } from '../signals'
-import { savePendingEntryNavigation } from '../storage'
 import { ChevronRightIcon, CollectionIcon } from './create-page-modal'
 import { CloseButton, ModalBackdrop, ModalHeader } from './modal-shell'
 
@@ -51,16 +50,9 @@ export function CollectionsBrowser() {
 		const def = selectedDef
 		if (!def) return null
 
-		const handleEntryClick = (slug: string, sourcePath: string, pathname?: string) => {
+		const handleEntryClick = (slug: string, sourcePath: string) => {
 			closeCollectionsBrowser()
-			if (pathname) {
-				// Navigate to the collection detail page to edit inline.
-				savePendingEntryNavigation({ collectionName: selected, slug, sourcePath, pathname })
-				window.location.href = pathname
-			} else {
-				// No detail page exists for this entry — open the markdown editor inline.
-				openMarkdownEditorForEntry(selected, slug, sourcePath, def)
-			}
+			openMarkdownEditorForEntry(selected, slug, sourcePath, def)
 		}
 
 		const handleAddNew = () => {
@@ -201,7 +193,7 @@ export function CollectionsBrowser() {
 								: (
 									<button
 										type="button"
-										onClick={() => handleEntryClick(entry.slug, entry.sourcePath, entry.pathname)}
+										onClick={() => handleEntryClick(entry.slug, entry.sourcePath)}
 										class="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-cms-lg transition-colors text-left group"
 										data-cms-ui
 									>

@@ -101,6 +101,8 @@ export function createDevMiddleware(
 
 	// CMS API endpoints (local dev server backend)
 	if (options.enableCmsApi) {
+		const projectRoot = getProjectRoot()
+
 		server.middlewares.use((req, res, next) => {
 			const url = req.url || ''
 			if (!url.startsWith('/_nua/cms/')) {
@@ -137,11 +139,31 @@ export function createDevMiddleware(
 				pageMap.set(pagePath, { pathname: pagePath })
 			}
 
-			// 2. Add collection entry pages from collection definitions
+			// 2. Add collection entry pages from collection definitions,
+			//    pre-populating pathnames from filesystem routes so the collections
+			//    browser can redirect to detail pages without visiting them first.
+			//    We build patched copies rather than mutating the originals so that
+			//    heuristic pathnames don't persist if the route file is later removed.
 			const collectionDefs = manifestWriter.getCollectionDefinitions()
-			for (const def of Object.values(collectionDefs)) {
-				if (def.entries) {
-					for (const entry of def.entries) {
+			const collectionRoutes = await discoverCollectionRoutes()
+			const responseCollectionDefs: Record<string, CollectionDefinition> = {}
+
+			for (const [name, def] of Object.entries(collectionDefs)) {
+				const routePrefix = collectionRoutes.get(def.name)
+				const needsPatching = routePrefix && def.entries?.some(e => !e.pathname)
+
+				if (!needsPatching) {
+					responseCollectionDefs[name] = def
+				} else {
+					responseCollectionDefs[name] = {
+						...def,
+						entries: def.entries!.map(e => e.pathname ? e : { ...e, pathname: `${routePrefix}${e.slug}` }),
+					}
+				}
+
+				const entries = responseCollectionDefs[name].entries
+				if (entries) {
+					for (const entry of entries) {
 						if (entry.pathname) {
 							pageMap.set(entry.pathname, { pathname: entry.pathname, title: entry.title })
 						}
@@ -165,8 +187,8 @@ export function createDevMiddleware(
 				availableTextStyles: manifestWriter.getAvailableTextStyles(),
 				pages,
 			}
-			if (Object.keys(collectionDefs).length > 0) {
-				manifest.collectionDefinitions = collectionDefs
+			if (Object.keys(responseCollectionDefs).length > 0) {
+				manifest.collectionDefinitions = responseCollectionDefs
 			}
 			const mdxComponents = manifestWriter.getMdxComponents()
 			if (mdxComponents) {
@@ -584,6 +606,65 @@ async function discoverPagesFromFilesystem(): Promise<string[]> {
 
 	await walk(pagesDir, '/')
 	return pages
+}
+
+/** Cached result of collection route discovery; invalidated by file watcher */
+let collectionRoutesCache: Map<string, string> | null = null
+
+/** Invalidate the cached collection routes (called from vite-plugin when route files change) */
+export function invalidateCollectionRoutesCache() {
+	collectionRoutesCache = null
+}
+
+/**
+ * Discover collection route patterns by scanning src/pages for dynamic route files
+ * (e.g. [slug].astro) that call getCollection(). Returns a map from collection name
+ * to the URL prefix (e.g. 'blog' → '/blog/'). Result is cached after first call.
+ */
+async function discoverCollectionRoutes(): Promise<Map<string, string>> {
+	if (collectionRoutesCache) return collectionRoutesCache
+
+	const projectRoot = getProjectRoot()
+	const pagesDir = path.join(projectRoot, 'src', 'pages')
+	const routes = new Map<string, string>()
+
+	try {
+		await fs.access(pagesDir)
+	} catch {
+		collectionRoutesCache = routes
+		return routes
+	}
+
+	async function walk(dir: string, urlPrefix: string) {
+		const entries = await fs.readdir(dir, { withFileTypes: true })
+		for (const entry of entries) {
+			if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue
+
+			const fullPath = path.join(dir, entry.name)
+			if (entry.isDirectory()) {
+				// Skip directories with dynamic segments
+				if (entry.name.includes('[')) continue
+				await walk(fullPath, `${urlPrefix}${entry.name}/`)
+			} else {
+				const ext = path.extname(entry.name)
+				if (!PAGE_EXTENSIONS.has(ext)) continue
+				// Only interested in dynamic route files
+				if (!entry.name.includes('[')) continue
+
+				try {
+					const content = await fs.readFile(fullPath, 'utf-8')
+					const match = content.match(/getCollection\(\s*['"](\w+)['"]\s*\)/)
+					if (match) {
+						routes.set(match[1], urlPrefix)
+					}
+				} catch { /* skip unreadable files */ }
+			}
+		}
+	}
+
+	await walk(pagesDir, '/')
+	collectionRoutesCache = routes
+	return routes
 }
 
 function mediaMimeFromExt(ext: string): string {
