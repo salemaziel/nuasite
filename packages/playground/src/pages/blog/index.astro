@@ -4,7 +4,7 @@ import DocLayout from '../../components/DocLayout.astro';
 
 const posts = (await getCollection('blog'))
 	.filter(post => !post.data.draft)
-	.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+	.sort((a, b) => b.data.date.localeCompare(a.data.date));
 ---
 
 <DocLayout title="Blog" description="Articles on design, engineering, and content strategy.">
@@ -25,8 +25,8 @@ const posts = (await getCollection('blog'))
 							<div class="flex flex-col justify-between">
 								<div>
 									<div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-										<time datetime={post.data.date.toISOString().slice(0, 10)}>
-											{post.data.date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+										<time datetime={post.data.date}>
+											{new Date(post.data.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
 										</time>
 										<span>&middot;</span>
 										<span>{post.data.author}</span>
@@ -41,7 +41,7 @@ const posts = (await getCollection('blog'))
 								<div class="mt-3 flex flex-wrap gap-2">
 									{post.data.tags.map(tag => (
 										<span class="rounded-full border border-slate-700 bg-slate-800/50 px-2.5 py-0.5 text-xs text-slate-400">
-											{tag}
+											{tag.id}
 										</span>
 									))}
 								</div>

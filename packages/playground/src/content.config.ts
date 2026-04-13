@@ -1,65 +1,73 @@
+import { n } from '@nuasite/cms'
 import { glob } from 'astro/loaders'
-import { defineCollection, z } from 'astro:content'
+import { defineCollection, reference } from 'astro:content'
 
 const servicesCollection = defineCollection({
 	loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/services' }),
-	schema: z.object({
-		title: z.string().nullable(),
-		subtitle: z.string().nullable(),
-		heroImageDesktop: z.string().nullable(),
-		heroImageMobile: z.string().nullable(),
-		stats: z.array(z.object({
-			value: z.string(),
-			label: z.string(),
+	schema: n.object({
+		title: n.text().nullable(),
+		subtitle: n.text().nullable(),
+		heroImageDesktop: n.image().nullable(),
+		heroImageMobile: n.image().nullable(),
+		stats: n.array(n.object({
+			value: n.text(),
+			label: n.text(),
 		})),
-		ctaText: z.string().nullable(),
-		ctaLink: z.string().nullable(),
+		ctaText: n.text().nullable(),
+		ctaLink: n.url().nullable(),
+	}),
+})
+
+const tagsCollection = defineCollection({
+	loader: glob({ pattern: '**/*.json', base: 'src/content/tags' }),
+	schema: n.object({
+		name: n.text(),
 	}),
 })
 
 const blogCollection = defineCollection({
 	loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/blog' }),
-	schema: z.object({
-		title: z.string(),
-		author: z.string(),
-		date: z.coerce.date(),
-		tags: z.array(z.string()),
-		excerpt: z.string(),
-		coverImage: z.string(),
-		draft: z.boolean().default(false),
+	schema: n.object({
+		title: n.text(),
+		author: n.string(),
+		date: n.date().orderBy('desc'),
+		tags: n.array(reference('tags')),
+		excerpt: n.textarea(),
+		coverImage: n.image(),
 	}),
 })
 
 const teamCollection = defineCollection({
 	loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/team' }),
-	schema: z.object({
-		name: z.string(),
-		role: z.string(),
-		bio: z.string(),
-		avatar: z.string(),
-		order: z.number(),
-		social: z.object({
-			twitter: z.string().optional(),
-			github: z.string().optional(),
-			linkedin: z.string().optional(),
+	schema: n.object({
+		name: n.text({ placeholder: 'Full name' }),
+		role: n.text({ placeholder: 'Job title' }),
+		bio: n.textarea({ rows: 4, maxLength: 500 }),
+		avatar: n.image(),
+		order: n.number({ min: 1, max: 100, step: 1 }).orderBy('asc'),
+		social: n.object({
+			twitter: n.text().optional(),
+			github: n.text().optional(),
+			linkedin: n.text().optional(),
 		}),
 	}),
 })
 
 const projectsCollection = defineCollection({
 	loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/projects' }),
-	schema: z.object({
-		title: z.string(),
-		client: z.string(),
-		date: z.coerce.date(),
-		tags: z.array(z.string()),
-		coverImage: z.string(),
-		url: z.string().nullable(),
-		featured: z.boolean().default(false),
+	schema: n.object({
+		title: n.text({ placeholder: 'Project name' }),
+		client: n.text({ placeholder: 'Client name' }),
+		date: n.coerce.date(),
+		tags: n.array(reference('tags')),
+		coverImage: n.text(),
+		url: n.text().nullable(),
+		featured: n.boolean().default(false),
 	}),
 })
 
 export const collections = {
+	tags: tagsCollection,
 	services: servicesCollection,
 	blog: blogCollection,
 	team: teamCollection,
