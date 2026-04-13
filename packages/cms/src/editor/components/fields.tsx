@@ -39,13 +39,15 @@ export interface TextFieldProps {
 	label: string
 	value: string | undefined
 	placeholder?: string
+	maxLength?: number
+	minLength?: number
 	onChange: (value: string) => void
 	isDirty?: boolean
 	onReset?: () => void
 	inputType?: string
 }
 
-export function TextField({ label, value, placeholder, onChange, isDirty, onReset, inputType = 'text' }: TextFieldProps) {
+export function TextField({ label, value, placeholder, maxLength, minLength, onChange, isDirty, onReset, inputType = 'text' }: TextFieldProps) {
 	return (
 		<div class="space-y-1.5">
 			<FieldLabel label={label} isDirty={isDirty} onReset={onReset} />
@@ -53,6 +55,8 @@ export function TextField({ label, value, placeholder, onChange, isDirty, onRese
 				type={inputType}
 				value={value ?? ''}
 				placeholder={placeholder}
+				maxLength={maxLength}
+				minLength={minLength}
 				onInput={(e) => onChange((e.target as HTMLInputElement).value)}
 				class={cn(
 					'w-full px-3 py-2 bg-white/10 border rounded-cms-sm text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-1 transition-colors',
@@ -270,12 +274,13 @@ export interface NumberFieldProps {
 	placeholder?: string
 	min?: number
 	max?: number
+	step?: number
 	onChange: (value: number | undefined) => void
 	isDirty?: boolean
 	onReset?: () => void
 }
 
-export function NumberField({ label, value, placeholder, min, max, onChange, isDirty, onReset }: NumberFieldProps) {
+export function NumberField({ label, value, placeholder, min, max, step, onChange, isDirty, onReset }: NumberFieldProps) {
 	return (
 		<div class="space-y-1.5">
 			<FieldLabel label={label} isDirty={isDirty} onReset={onReset} />
@@ -285,6 +290,7 @@ export function NumberField({ label, value, placeholder, min, max, onChange, isD
 				placeholder={placeholder}
 				min={min}
 				max={max}
+				step={step}
 				onInput={(e) => {
 					const val = (e.target as HTMLInputElement).value
 					onChange(val === '' ? undefined : Number(val))

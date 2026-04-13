@@ -395,6 +395,7 @@ export function SchemaFrontmatterField({
 	onChange,
 }: SchemaFrontmatterFieldProps) {
 	const label = formatFieldLabel(field.name)
+	const hints = field.hints
 
 	switch (field.type) {
 		case 'text':
@@ -404,7 +405,9 @@ export function SchemaFrontmatterField({
 				<TextField
 					label={label}
 					value={(value as string) ?? ''}
-					placeholder={getPlaceholder(field)}
+					placeholder={hints?.placeholder ?? getPlaceholder(field)}
+					maxLength={hints?.maxLength as number | undefined}
+					minLength={hints?.minLength as number | undefined}
 					onChange={(v) => onChange(v)}
 					inputType={field.type === 'text' ? undefined : field.type}
 				/>
@@ -442,8 +445,9 @@ export function SchemaFrontmatterField({
 					<textarea
 						value={(value as string) ?? ''}
 						onInput={(e) => onChange((e.target as HTMLTextAreaElement).value)}
-						placeholder={getPlaceholder(field)}
-						rows={3}
+						placeholder={hints?.placeholder ?? getPlaceholder(field)}
+						rows={hints?.rows ?? 3}
+						maxLength={hints?.maxLength as number | undefined}
 						class="px-3 py-2 text-sm bg-white/10 border border-white/20 rounded-cms-sm text-white placeholder-white/30 focus:outline-none focus:border-white/40 resize-none"
 						data-cms-ui
 					/>
@@ -459,6 +463,8 @@ export function SchemaFrontmatterField({
 					<input
 						type={field.type === 'datetime' ? 'datetime-local' : field.type}
 						value={(value as string) ?? ''}
+						min={hints?.min != null ? String(hints.min) : undefined}
+						max={hints?.max != null ? String(hints.max) : undefined}
 						onInput={(e) => onChange((e.target as HTMLInputElement).value)}
 						class="px-3 py-2 text-sm bg-white/10 border border-white/20 rounded-cms-sm text-white focus:outline-none focus:border-white/40"
 						data-cms-ui
@@ -471,6 +477,10 @@ export function SchemaFrontmatterField({
 				<NumberField
 					label={label}
 					value={(value as number) ?? undefined}
+					placeholder={hints?.placeholder}
+					min={typeof hints?.min === 'number' ? hints.min : undefined}
+					max={typeof hints?.max === 'number' ? hints.max : undefined}
+					step={hints?.step}
 					onChange={(v) => onChange(v ?? 0)}
 				/>
 			)
