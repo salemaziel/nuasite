@@ -112,6 +112,8 @@ export const n = {
 	url: (hints?: TextHints) => stringField('url', hints),
 	/** Email input */
 	email: (hints?: TextHints) => stringField('email', hints),
+	/** Phone number input */
+	tel: (hints?: TextHints) => stringField('tel', hints),
 	/** Color picker */
 	color: () => withOrderBy(z.string().describe('cms:color')),
 	/** Date picker (handles YAML Date coercion → ISO date string). Accepts hints for the scanner; no Zod validation applied. */

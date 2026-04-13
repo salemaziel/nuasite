@@ -236,6 +236,7 @@ export type FieldType =
 	| 'image'
 	| 'url'
 	| 'email'
+	| 'tel'
 	| 'color'
 	| 'select'
 	| 'array'

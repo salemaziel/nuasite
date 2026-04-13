@@ -314,6 +314,7 @@ const INLINE_INPUT_TYPES: Record<string, string> = {
 	datetime: 'datetime-local',
 	time: 'time',
 	email: 'email',
+	tel: 'tel',
 }
 const inputClass =
 	'w-full bg-white/5 border border-white/10 rounded-cms-sm px-2.5 py-1.5 text-[13px] text-white/80 placeholder:text-white/30 outline-none focus:border-white/25 transition-colors'

@@ -469,7 +469,7 @@ function parseContentConfigReferences(
 }
 
 /** Valid field type names exported by `n` helper from @nuasite/cms */
-const FIELD_HELPER_TYPES = new Set(['text', 'number', 'image', 'url', 'email', 'color', 'date', 'datetime', 'time', 'textarea'])
+const FIELD_HELPER_TYPES = new Set(['text', 'number', 'image', 'url', 'email', 'tel', 'color', 'date', 'datetime', 'time', 'textarea'])
 
 /**
  * Parse the content config file to extract explicit field type hints:
