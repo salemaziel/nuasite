@@ -213,6 +213,96 @@ The integration auto-detects Astro content collections in `src/content/`. For ea
 - Provides markdown CRUD endpoints for creating/updating entries
 - Parses frontmatter with `yaml` (no `gray-matter` dependency needed)
 
+### Schema Helpers (`n`)
+
+Use the `n` helper instead of `z` (Zod) in your content config. It provides CMS-aware field types that tell the editor which input to render, and accepts an options object that both validates data and configures the editor UI.
+
+```typescript
+import { n } from '@nuasite/cms'
+import { glob } from 'astro/loaders'
+import { defineCollection, reference } from 'astro:content'
+
+const tagsCollection = defineCollection({
+	loader: glob({ pattern: '**/*.json', base: 'src/content/tags' }),
+	schema: n.object({
+		name: n.string(),
+	}),
+})
+
+const blogCollection = defineCollection({
+	loader: glob({ pattern: '**/*.{md,mdx}', base: 'src/content/blog' }),
+	schema: n.object({
+		title: n.text({ placeholder: 'Enter title', maxLength: 120 }),
+		author: n.text(),
+		date: n.date().orderBy('desc'),
+		tags: n.array(reference('tags')),
+		excerpt: n.textarea({ rows: 2, maxLength: 300 }),
+		coverImage: n.image(),
+		featured: n.boolean().default(false),
+	}),
+})
+```
+
+All `n` methods return standard Zod schemas, so `.optional()`, `.nullable()`, `.default()`, and other Zod chainable methods work as usual.
+
+### Field Types
+
+| Method            | Editor input   | Underlying Zod type               |
+| ----------------- | -------------- | --------------------------------- |
+| `n.text()`        | Text input     | `z.string()`                      |
+| `n.textarea()`    | Multiline      | `z.string()`                      |
+| `n.number()`      | Number input   | `z.number()`                      |
+| `n.boolean()`     | Checkbox       | `z.boolean()`                     |
+| `n.image()`       | Image picker   | `z.string()`                      |
+| `n.url()`         | URL input      | `z.string()`                      |
+| `n.email()`       | Email input    | `z.string()`                      |
+| `n.color()`       | Color picker   | `z.string()`                      |
+| `n.date()`        | Date picker    | `z.string()` (coerces YAML dates) |
+| `n.datetime()`    | Datetime input | `z.string()` (coerces YAML dates) |
+| `n.time()`        | Time input     | `z.string()`                      |
+| `n.string()`      | Auto-detected  | `z.string()` (no CMS hint)        |
+| `n.object()`      | —              | `z.object()`                      |
+| `n.array()`       | —              | `z.array()`                       |
+| `n.enum()`        | —              | `z.enum()`                        |
+| `n.coerce.date()` | —              | `z.coerce.date()`                 |
+
+### Field Hints
+
+Pass an options object to configure both Zod validation and editor input attributes in one place:
+
+```typescript
+n.number({ min: 1, max: 100, step: 1 }) // <input type="number" min="1" max="100" step="1">
+n.text({ placeholder: 'Enter title', maxLength: 120 })
+n.textarea({ rows: 5, maxLength: 500, placeholder: '...' })
+n.date({ min: '2024-01-01', max: '2030-12-31' })
+n.image({ accept: 'image/png,image/jpeg' })
+```
+
+| Field type     | Available hints                         |
+| -------------- | --------------------------------------- |
+| `n.number()`   | `min`, `max`, `step`, `placeholder`     |
+| `n.text()`     | `placeholder`, `maxLength`, `minLength` |
+| `n.textarea()` | `placeholder`, `maxLength`, `rows`      |
+| `n.url()`      | `placeholder`, `maxLength`, `minLength` |
+| `n.email()`    | `placeholder`, `maxLength`, `minLength` |
+| `n.date()`     | `min`, `max`                            |
+| `n.datetime()` | `min`, `max`                            |
+| `n.time()`     | `min`, `max`                            |
+| `n.image()`    | `accept`                                |
+
+Numeric hints (`min`, `max`, `step`, `maxLength`, `minLength`) also apply Zod validation — out-of-range values will be rejected at content build time.
+
+### Collection Ordering
+
+Chain `.orderBy()` on any scalar field to control entry order in the collections browser:
+
+```typescript
+n.number({ min: 1, max: 100 }).orderBy('asc') // ascending (default)
+n.date().orderBy('desc') // descending (newest first)
+```
+
+The direction defaults to `'asc'` if omitted. Entries with a missing order field sort to the end.
+
 ## Component Operations
 
 Components in `componentDirs` (default: `src/components/`) are scanned for props and registered as insertable/removable elements. The editor can:
@@ -334,6 +424,16 @@ Deselects the currently selected component and closes the block editor. No addit
 // Default export
 import nuaCms from '@nuasite/cms'
 
+// Schema helpers
+import { n } from '@nuasite/cms'
+import type {
+	DateHints,
+	ImageHints,
+	NumberHints,
+	TextareaHints,
+	TextHints,
+} from '@nuasite/cms'
+
 // Media adapters
 import { contemberMedia, localMedia, s3Media } from '@nuasite/cms'
 
@@ -341,7 +441,10 @@ import { contemberMedia, localMedia, s3Media } from '@nuasite/cms'
 import type { MediaItem, MediaStorageAdapter } from '@nuasite/cms'
 import type {
 	CmsManifest,
+	CollectionDefinition,
 	ComponentDefinition,
+	FieldDefinition,
+	FieldHints,
 	ManifestEntry,
 } from '@nuasite/cms'
 
