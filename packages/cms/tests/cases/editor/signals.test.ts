@@ -385,9 +385,9 @@ test('dirtyImageChanges returns only dirty changes', () => {
 
 	const dirty = dirtyImageChanges.value
 	expect(dirty.length).toBe(2)
-	expect(dirty.some(([id]) => id === 'dirty-1')).toBe(true)
-	expect(dirty.some(([id]) => id === 'dirty-2')).toBe(true)
-	expect(dirty.some(([id]) => id === 'clean-1')).toBe(false)
+	expect(dirty.some(([id]: [string, unknown]) => id === 'dirty-1')).toBe(true)
+	expect(dirty.some(([id]: [string, unknown]) => id === 'dirty-2')).toBe(true)
+	expect(dirty.some(([id]: [string, unknown]) => id === 'clean-1')).toBe(false)
 })
 
 test('hasDirtyImageChanges computed signal works', () => {

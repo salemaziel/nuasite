@@ -217,9 +217,9 @@ withTempDir('initializeSearchIndex', (getCtx) => {
 		const textIndex = getTextSearchIndex()
 		const files = [...new Set(textIndex.map((e: SearchIndexEntry) => e.file))]
 
-		expect(files.some((f: string) => f.includes('components/Button.astro'))).toBe(true)
-		expect(files.some((f: string) => f.includes('pages/index.astro'))).toBe(true)
-		expect(files.some((f: string) => f.includes('layouts/Base.astro'))).toBe(true)
+		expect(files.some(f => String(f).includes('components/Button.astro'))).toBe(true)
+		expect(files.some(f => String(f).includes('pages/index.astro'))).toBe(true)
+		expect(files.some(f => String(f).includes('layouts/Base.astro'))).toBe(true)
 	})
 
 	test('should skip directories that do not exist', async () => {

@@ -110,7 +110,7 @@ withTempDir('collection-scanner: orderBy', (getCtx) => {
 		await ctx.writeFile('src/content/team/b.md', '---\nname: Bob\norder: 2\n---\n')
 
 		const result = await scanCollections()
-		const slugs = result['team']!.entries!.map(e => e.slug)
+		const slugs = result['team']!.entries!.map((e: { slug: string }) => e.slug)
 		expect(slugs).toEqual(['a', 'b', 'c'])
 	})
 
@@ -124,7 +124,7 @@ withTempDir('collection-scanner: orderBy', (getCtx) => {
 		await ctx.writeFile('src/content/blog/new.md', '---\ntitle: New\ndate: "2025-01-01"\n---\n')
 
 		const result = await scanCollections()
-		const slugs = result['blog']!.entries!.map(e => e.slug)
+		const slugs = result['blog']!.entries!.map((e: { slug: string }) => e.slug)
 		expect(slugs).toEqual(['new', 'mid', 'old'])
 	})
 

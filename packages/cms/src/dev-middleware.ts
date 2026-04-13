@@ -654,7 +654,7 @@ async function discoverCollectionRoutes(): Promise<Map<string, string>> {
 				try {
 					const content = await fs.readFile(fullPath, 'utf-8')
 					const match = content.match(/getCollection\(\s*['"](\w+)['"]\s*\)/)
-					if (match) {
+					if (match?.[1]) {
 						routes.set(match[1], urlPrefix)
 					}
 				} catch { /* skip unreadable files */ }
