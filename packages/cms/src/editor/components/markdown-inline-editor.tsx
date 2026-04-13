@@ -4,7 +4,6 @@ import {
 	commonmark,
 	liftListItemCommand,
 	toggleEmphasisCommand,
-	toggleLinkCommand,
 	toggleStrongCommand,
 	wrapInBlockquoteCommand,
 	wrapInBulletListCommand,
@@ -13,10 +12,12 @@ import {
 import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm'
 import { callCommand, insert, replaceAll } from '@milkdown/utils'
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
+import { useLinkPopover } from '../hooks/useLinkPopover'
 import { uploadMedia } from '../markdown-api'
 import { insertMdxComponentCommand, mdxComponentPlugin } from '../milkdown-mdx-plugin'
 import { type ActiveFormats, defaultActiveFormats, isInListType, setupFormatTracking, toggleHeading } from '../milkdown-utils'
 import { config, mdxComponentPickerOpen, openMediaLibraryWithCallback, resetMarkdownEditorState, showToast, updateMarkdownContent } from '../signals'
+import { LinkEditPopover } from './link-edit-popover'
 import { MdxComponentIcon } from './mdx-block-view'
 import { MdxComponentPicker } from './mdx-component-picker'
 
@@ -46,6 +47,15 @@ export function MarkdownInlineEditor({
 
 	// Track active formatting for toolbar highlighting
 	const [activeFormats, setActiveFormats] = useState<ActiveFormats>(defaultActiveFormats)
+	const {
+		linkPopoverState,
+		linkPopoverOpen,
+		closeLinkPopover,
+		toggleLinkPopover,
+		applyLink,
+		removeLink,
+		pageSuggestions,
+	} = useLinkPopover(editorInstanceRef, activeFormats)
 
 	// Store initial content in ref to avoid stale closure issues
 	const initialContentRef = useRef(initialContent)
@@ -201,54 +211,6 @@ export function MarkdownInlineEditor({
 			runCommand(wrapInOrderedListCommand.key)
 		}
 	}, [runCommand, checkInList])
-
-	const handleInsertLink = useCallback(() => {
-		if (!editorInstanceRef.current) return
-
-		// If already in a link, remove it
-		if (activeFormats.link) {
-			try {
-				// Use toggleLinkCommand with empty href to remove link
-				editorInstanceRef.current.action(
-					callCommand(toggleLinkCommand.key, { href: '' }),
-				)
-				return
-			} catch (error) {
-				console.error('Failed to remove link:', error)
-			}
-		}
-
-		// Get selected text from editor
-		let selectedText = ''
-		try {
-			const view = editorInstanceRef.current.ctx.get(editorViewCtx)
-			const { state } = view
-			const { from, to } = state.selection
-			if (from !== to) {
-				selectedText = state.doc.textBetween(from, to, ' ')
-			}
-		} catch {
-			// Ignore errors
-		}
-
-		// Prompt for URL (pre-fill with existing URL if editing)
-		const defaultUrl = activeFormats.linkHref || ''
-		const url = prompt('Enter URL:', defaultUrl)
-		if (url) {
-			try {
-				// Use toggleLinkCommand to add/update link
-				editorInstanceRef.current.action(
-					callCommand(toggleLinkCommand.key, { href: url }),
-				)
-			} catch (error) {
-				console.error('Failed to add link:', error)
-				// Fallback: use markdown insertion
-				const linkText = selectedText || prompt('Enter link text:', 'Link') || 'Link'
-				const linkMarkdown = `[${linkText}](${url})`
-				editorInstanceRef.current.action(insert(linkMarkdown))
-			}
-		}
-	}, [activeFormats.link, activeFormats.linkHref])
 
 	const handleInsertHeading = useCallback((level: number) => {
 		if (!editorInstanceRef.current) return
@@ -575,9 +537,9 @@ export function MarkdownInlineEditor({
 				{/* Links & Images */}
 				<div class="flex items-center gap-0.5">
 					<ToolbarButton
-						onClick={handleInsertLink}
-						title={activeFormats.link ? 'Remove Link' : 'Insert Link'}
-						active={activeFormats.link}
+						onClick={toggleLinkPopover}
+						title={activeFormats.link ? 'Edit Link' : 'Insert Link'}
+						active={activeFormats.link || linkPopoverOpen}
 					>
 						<svg
 							class="w-4 h-4"
@@ -619,6 +581,17 @@ export function MarkdownInlineEditor({
 					)}
 				</div>
 			</div>
+
+			{/* Link edit popover — rendered outside the toolbar stacking context so it layers above the sidebar */}
+			{linkPopoverState && (
+				<LinkEditPopover
+					initialUrl={linkPopoverState.href}
+					suggestions={pageSuggestions}
+					onApply={applyLink}
+					onRemove={linkPopoverState.isEdit ? removeLink : undefined}
+					onClose={closeLinkPopover}
+				/>
+			)}
 
 			{/* Editor */}
 			<div

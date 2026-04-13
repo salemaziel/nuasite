@@ -4,21 +4,22 @@ import {
 	commonmark,
 	liftListItemCommand,
 	toggleEmphasisCommand,
-	toggleLinkCommand,
 	toggleStrongCommand,
 	wrapInBlockquoteCommand,
 	wrapInBulletListCommand,
 	wrapInOrderedListCommand,
 } from '@milkdown/preset-commonmark'
 import { gfm, toggleStrikethroughCommand } from '@milkdown/preset-gfm'
-import { callCommand, insert, replaceAll } from '@milkdown/utils'
+import { callCommand, replaceAll } from '@milkdown/utils'
 import type { ComponentChildren } from 'preact'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useLinkPopover } from '../hooks/useLinkPopover'
 import { getComponentDefinition } from '../manifest'
 import { MDX_EXPR_PREFIX } from '../milkdown-mdx-plugin'
 import { type ActiveFormats, defaultActiveFormats, isInListType, setupFormatTracking, toggleHeading } from '../milkdown-utils'
 import { manifest, openMediaLibraryWithCallback } from '../signals'
 import type { ComponentProp } from '../types'
+import { LinkEditPopover } from './link-edit-popover'
 
 const MDX_COMPONENT_ICON_PATH =
 	'M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5'
@@ -78,6 +79,7 @@ function MiniMilkdownEditor({ value, onChange }: { value: string; onChange: (v: 
 	const latestMarkdown = useRef(value)
 	const isFocused = useRef(false)
 	const [formats, setFormats] = useState<ActiveFormats>(defaultActiveFormats)
+	const link = useLinkPopover(editorRef, formats)
 
 	useEffect(() => {
 		const el = containerRef.current
@@ -142,18 +144,6 @@ function MiniMilkdownEditor({ value, onChange }: { value: string; onChange: (v: 
 			return isInListType(view, listType)
 		} catch { /* ignore */ }
 		return false
-	}, [])
-
-	const handleLink = useCallback(() => {
-		if (!editorRef.current) return
-		const url = prompt('Enter URL:', 'https://')
-		if (!url) return
-		try {
-			editorRef.current.action(callCommand(toggleLinkCommand.key, { href: url }))
-		} catch {
-			const linkText = window.getSelection()?.toString() || 'Link'
-			editorRef.current.action(insert(`[${linkText}](${url})`))
-		}
 	}, [])
 
 	const handleHeadingToggle = useCallback((level: number) => {
@@ -242,7 +232,7 @@ function MiniMilkdownEditor({ value, onChange }: { value: string; onChange: (v: 
 				<div class="w-px h-4 bg-white/15 mx-0.5" />
 
 				{/* Link */}
-				<MiniToolbarButton onClick={handleLink} title="Link" active={formats.link}>
+				<MiniToolbarButton onClick={link.toggleLinkPopover} title="Link" active={formats.link || link.linkPopoverOpen}>
 					<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path
 							stroke-linecap="round"
@@ -252,6 +242,19 @@ function MiniMilkdownEditor({ value, onChange }: { value: string; onChange: (v: 
 					</svg>
 				</MiniToolbarButton>
 			</div>
+
+			{link.linkPopoverState && (
+				<div class="mb-1.5">
+					<LinkEditPopover
+						inline
+						initialUrl={link.linkPopoverState.href}
+						suggestions={link.pageSuggestions}
+						onApply={link.applyLink}
+						onRemove={link.linkPopoverState.isEdit ? link.removeLink : undefined}
+						onClose={link.closeLinkPopover}
+					/>
+				</div>
+			)}
 
 			{/* Editor */}
 			<div
@@ -426,11 +429,11 @@ export function MdxBlockCard({ componentName, props, hasExpressions, slotContent
 
 	return (
 		<div
-			class="my-3 mx-0 bg-white/5 border border-white/15 rounded-cms-md overflow-hidden select-none"
+			class="my-3 mx-0 bg-white/5 border border-white/15 rounded-cms-md select-none"
 			data-cms-ui
 		>
 			{/* Header */}
-			<div class="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/10">
+			<div class="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/10 rounded-t-cms-md">
 				<div class="flex items-center gap-2">
 					<MdxComponentIcon />
 					<span class="text-[13px] font-semibold text-white">{componentName}</span>

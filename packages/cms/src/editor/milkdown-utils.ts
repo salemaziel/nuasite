@@ -121,6 +121,27 @@ export function toggleHeading(view: EditorView, level: number): void {
 	view.focus()
 }
 
+/**
+ * Remove the link mark around the current cursor position.
+ * Finds the text node with a link mark at/near the selection and dispatches a removeMark transaction.
+ */
+export function removeLinkMark(view: EditorView): void {
+	const { state } = view
+	const { from, to } = state.selection
+	const linkType = state.schema.marks.link
+	if (!linkType) return
+	let linkFrom = from
+	let linkTo = to
+	state.doc.nodesBetween(from, from === to ? to + 1 : to, (node, pos) => {
+		if (linkType.isInSet(node.marks)) {
+			linkFrom = pos
+			linkTo = pos + node.nodeSize
+			return false
+		}
+	})
+	view.dispatch(state.tr.removeMark(linkFrom, linkTo, linkType))
+}
+
 function formatsEqual(a: ActiveFormats, b: ActiveFormats): boolean {
 	return a.bold === b.bold
 		&& a.italic === b.italic
