@@ -43,8 +43,8 @@ jobs:
         with:
           version: ${{ github.event.workflow_run.head_branch }}
 
-      - name: "Build app"
-        run: bun run build
+      - name: "Build packages"
+        run: bun run ts:build && bun run --filter '!playground' build
 
       - name: "Publish NPM"
         run: bash ./scripts/npm-publish/run.sh
