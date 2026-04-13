@@ -110,7 +110,14 @@ const routeMap = new Map<string, RouteHandler>([
 		sendJson(res, result)
 	}),
 	post('markdown/rename', (body: Parameters<typeof handleRenameMarkdown>[0]) => handleRenameMarkdown(body)),
-	postWithStatus('markdown/create', (body: Parameters<typeof handleCreateMarkdown>[0]) => handleCreateMarkdown(body)),
+	custom('POST', 'markdown/create', async ({ req, res, manifestWriter, contentDir }) => {
+		const body = await parseJsonBody<Parameters<typeof handleCreateMarkdown>[0]>(req)
+		const result = await handleCreateMarkdown(body)
+		if (result.success) {
+			manifestWriter.setCollectionDefinitions(await scanCollections(contentDir))
+		}
+		sendJson(res, result, result.success ? 200 : 400)
+	}),
 	custom('POST', 'markdown/delete', async ({ req, res, manifestWriter, contentDir }) => {
 		const body = await parseJsonBody<Parameters<typeof handleDeleteMarkdown>[0]>(req)
 		const fullPath = path.resolve(getProjectRoot(), body.filePath?.replace(/^\//, '') ?? '')
