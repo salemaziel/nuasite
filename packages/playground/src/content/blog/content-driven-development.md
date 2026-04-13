@@ -1,11 +1,12 @@
 ---
 title: Collection Schema Inference from Frontmatter
 author: Nua Team
-date: 2026-01-20
+date: '2026-01-20'
 tags:
   - cms
   - collections
-excerpt: The CMS now infers field types from your markdown frontmatter — no manual schema configuration needed.
+excerpt: The CMS now infers field types from your markdown frontmatter — no
+  manual schema configuration needed.
 coverImage: https://images.unsplash.com/photo-1484417894907-623942c8ee29?w=1200&h=630&fit=crop
 draft: true
 ---
@@ -17,9 +18,13 @@ Defining collection schemas by hand is tedious. You already have the data in you
 The scanner reads all `.md` and `.mdx` files in a collection directory. For each frontmatter field, it examines values across all entries to determine the type:
 
 - Strings that look like URLs → `url` field type
+
 - Strings that look like dates → `date` field type
+
 - Arrays of objects → `array` with inferred object schema
+
 - Boolean values → `boolean` toggle
+
 - Numbers → `number` input
 
 Fields that appear in some entries but not others are marked as optional. Fields that contain `null` are marked as nullable.

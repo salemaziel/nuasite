@@ -10,15 +10,16 @@ excerpt: The LLM enhancements integration exposes every page as a .md endpoint,
 coverImage: https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&h=630&fit=crop
 draft: false
 ---
+
 Large language models don't parse [HTML](https://google.com) well. They need clean, structured text. The `@nuasite/llm-enhancements` integration solves this by generating a `.md` version of every page on your site.
 
 ### What gets generated
 
 For a page at `/about/`, the integration creates `/about.md` containing the page's text content stripped of HTML tags, navigation, and boilerplate. It also generates:
 
-* `/llms.txt` — a site-wide index of all `.md` endpoints
+- `/llms.txt` — a site-wide index of all `.md` endpoints
 
-* `/.well-known/llm.md` — a standardized discovery endpoint
+- `/.well-known/llm.md` — a standardized discovery endpoint
 
 ### How content is extracted
 
