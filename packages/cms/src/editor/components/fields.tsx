@@ -1,4 +1,8 @@
+import type { ComponentChildren } from 'preact'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { getDropdownPosition } from '../constants'
+import { useClickOutsideEscape } from '../hooks/useClickOutsideEscape'
+import { useSearchFilter } from '../hooks/useSearchFilter'
 import { cn } from '../lib/cn'
 
 // ============================================================================
@@ -335,6 +339,48 @@ export function HighlightMatch({ text, query }: { text: string; query: string })
 }
 
 // ============================================================================
+// Dropdown Panel (fixed-position container for select/combobox dropdowns)
+// ============================================================================
+
+export interface DropdownPanelProps {
+	/** Ref to the trigger element — used for positioning and outside-click detection */
+	triggerRef: { readonly current: HTMLElement | null }
+	isOpen: boolean
+	onClose: () => void
+	maxHeight?: number
+	children: ComponentChildren
+	className?: string
+	/** Forward a ref to the panel div (e.g. for keyboard-nav scroll) */
+	panelRef?: { current: HTMLDivElement | null }
+	/** Additional refs to exempt from outside-click detection (e.g. a wrapper containing related UI like selected tags) */
+	exemptRefs?: ReadonlyArray<{ readonly current: HTMLElement | null }>
+}
+
+/**
+ * Fixed-position dropdown container that escapes parent overflow clipping.
+ * Handles outside-click and Escape-key dismissal.
+ */
+export function DropdownPanel({ triggerRef, isOpen, onClose, maxHeight = 192, children, className, panelRef, exemptRefs }: DropdownPanelProps) {
+	const internalRef = useRef<HTMLDivElement>(null)
+	const ref = panelRef ?? internalRef
+
+	useClickOutsideEscape([ref, triggerRef, ...(exemptRefs ?? [])], isOpen, onClose)
+
+	if (!isOpen) return null
+
+	return (
+		<div
+			ref={ref}
+			class={cn('overflow-y-auto bg-cms-dark shadow-lg', className)}
+			style={getDropdownPosition(triggerRef.current, maxHeight)}
+			data-cms-ui
+		>
+			{children}
+		</div>
+	)
+}
+
+// ============================================================================
 // ComboBox Field (searchable dropdown with free-text input)
 // ============================================================================
 
@@ -356,14 +402,7 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 	const inputRef = useRef<HTMLInputElement>(null)
 	const listRef = useRef<HTMLDivElement>(null)
 
-	// Filter options based on query
-	const filtered = useMemo(() => {
-		if (!query) return options
-		const q = query.toLowerCase()
-		return options.filter(
-			o => o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q),
-		)
-	}, [query, options])
+	const filtered = useSearchFilter(options, query, o => `${o.label} ${o.value}`)
 
 	const handleInput = useCallback((e: Event) => {
 		const v = (e.target as HTMLInputElement).value
@@ -373,20 +412,13 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 		setHighlightedIndex(-1)
 	}, [onChange])
 
-	const handleFocus = useCallback(() => {
-		setIsOpen(true)
-	}, [])
-
-	const handleBlur = useCallback(() => {
-		// Delay to allow click on option to register
-		setTimeout(() => setIsOpen(false), 150)
-	}, [])
-
 	const selectOption = useCallback((optValue: string) => {
 		onChange(optValue)
 		setQuery('')
 		setIsOpen(false)
 	}, [onChange])
+
+	const closeDropdown = useCallback(() => setIsOpen(false), [])
 
 	const handleKeyDown = useCallback((e: KeyboardEvent) => {
 		if (e.key === 'Enter') {
@@ -403,8 +435,6 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault()
 			setHighlightedIndex(i => Math.max(i - 1, 0))
-		} else if (e.key === 'Escape') {
-			setIsOpen(false)
 		}
 	}, [isOpen, filtered, highlightedIndex, selectOption])
 
@@ -419,7 +449,7 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 	const showDropdown = isOpen && filtered.length > 0
 
 	return (
-		<div class="space-y-1.5 relative">
+		<div class="space-y-1.5">
 			<FieldLabel label={label} isDirty={isDirty} onReset={onReset} />
 			<input
 				ref={inputRef}
@@ -428,8 +458,8 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 				placeholder={placeholder}
 				required={required}
 				onInput={handleInput}
-				onFocus={handleFocus}
-				onBlur={handleBlur}
+				onFocus={() => setIsOpen(true)}
+				onBlur={() => setTimeout(closeDropdown, 150)}
 				onKeyDown={handleKeyDown}
 				autocomplete="off"
 				class={cn(
@@ -440,40 +470,41 @@ export function ComboBoxField({ label, value, placeholder, options, onChange, is
 				)}
 				data-cms-ui
 			/>
-			{showDropdown && (
-				<div
-					ref={listRef}
-					class="absolute z-50 left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-cms-dark border border-white/15 rounded-cms-sm shadow-lg"
-					data-cms-ui
-				>
-					{filtered.map((opt, i) => (
-						<button
-							key={opt.value}
-							type="button"
-							onMouseDown={(e) => {
-								e.preventDefault()
-								selectOption(opt.value)
-							}}
-							class={cn(
-								'w-full text-left px-3 py-2 text-xs transition-colors cursor-pointer',
-								i === highlightedIndex
-									? 'bg-white/15 text-white'
-									: 'text-white/70 hover:bg-white/10 hover:text-white',
-							)}
-							data-cms-ui
-						>
-							<span class="block truncate font-medium">
-								<HighlightMatch text={opt.label} query={query} />
+			<DropdownPanel
+				triggerRef={inputRef}
+				isOpen={showDropdown}
+				onClose={closeDropdown}
+				maxHeight={160}
+				panelRef={listRef}
+				className="border border-white/15 rounded-cms-sm"
+			>
+				{filtered.map((opt, i) => (
+					<button
+						key={opt.value}
+						type="button"
+						onMouseDown={(e) => {
+							e.preventDefault()
+							selectOption(opt.value)
+						}}
+						class={cn(
+							'w-full text-left px-3 py-2 text-xs transition-colors cursor-pointer',
+							i === highlightedIndex
+								? 'bg-white/15 text-white'
+								: 'text-white/70 hover:bg-white/10 hover:text-white',
+						)}
+						data-cms-ui
+					>
+						<span class="block truncate font-medium">
+							<HighlightMatch text={opt.label} query={query} />
+						</span>
+						{opt.description && (
+							<span class="block truncate text-white/40">
+								<HighlightMatch text={opt.description} query={query} />
 							</span>
-							{opt.description && (
-								<span class="block truncate text-white/40">
-									<HighlightMatch text={opt.description} query={query} />
-								</span>
-							)}
-						</button>
-					))}
-				</div>
-			)}
+						)}
+					</button>
+				))}
+			</DropdownPanel>
 		</div>
 	)
 }
@@ -510,11 +541,7 @@ export function MultiSelectField({ label, selected, options, onChange, isDirty, 
 		return map
 	}, [normalizedOptions])
 
-	const filtered = useMemo(() => {
-		if (!query) return normalizedOptions
-		const q = query.toLowerCase()
-		return normalizedOptions.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
-	}, [query, normalizedOptions])
+	const filtered = useSearchFilter(normalizedOptions, query, o => `${o.label} ${o.value}`)
 
 	const toggleOption = useCallback((value: string) => {
 		if (selected.includes(value)) {
@@ -524,20 +551,10 @@ export function MultiSelectField({ label, selected, options, onChange, isDirty, 
 		}
 	}, [selected, onChange])
 
-	// Close on outside click
-	useEffect(() => {
-		if (!isOpen) return
-		const handler = (e: MouseEvent) => {
-			if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-				setIsOpen(false)
-			}
-		}
-		document.addEventListener('mousedown', handler)
-		return () => document.removeEventListener('mousedown', handler)
-	}, [isOpen])
+	const closeDropdown = useCallback(() => setIsOpen(false), [])
 
 	return (
-		<div class="space-y-1.5 relative" ref={containerRef} data-cms-ui>
+		<div class="space-y-1.5" ref={containerRef} data-cms-ui>
 			<FieldLabel label={label} isDirty={isDirty} onReset={onReset} />
 
 			{/* Selected pills */}
@@ -580,54 +597,55 @@ export function MultiSelectField({ label, selected, options, onChange, isDirty, 
 				data-cms-ui
 			/>
 
-			{/* Dropdown */}
-			{isOpen && (
-				<div
-					class="absolute z-50 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-cms-dark border border-white/15 rounded-cms-sm shadow-lg"
-					data-cms-ui
-				>
-					{filtered.length === 0
-						? <div class="px-3 py-2 text-xs text-white/40">No options found</div>
-						: filtered.map(opt => {
-							const isSelected = selected.includes(opt.value)
-							return (
-								<button
-									key={opt.value}
-									type="button"
-									onMouseDown={(e) => {
-										e.preventDefault()
-										toggleOption(opt.value)
-									}}
+			<DropdownPanel
+				triggerRef={inputRef}
+				isOpen={isOpen}
+				onClose={closeDropdown}
+				maxHeight={192}
+				className="border border-white/15 rounded-cms-sm"
+				exemptRefs={[containerRef]}
+			>
+				{filtered.length === 0
+					? <div class="px-3 py-2 text-xs text-white/40">No options found</div>
+					: filtered.map(opt => {
+						const isSelected = selected.includes(opt.value)
+						return (
+							<button
+								key={opt.value}
+								type="button"
+								onMouseDown={(e) => {
+									e.preventDefault()
+									toggleOption(opt.value)
+								}}
+								class={cn(
+									'w-full text-left px-3 py-2 text-xs transition-colors cursor-pointer flex items-center gap-2',
+									isSelected
+										? 'bg-cms-primary/10 text-white'
+										: 'text-white/70 hover:bg-white/10 hover:text-white',
+								)}
+								data-cms-ui
+							>
+								<span
 									class={cn(
-										'w-full text-left px-3 py-2 text-xs transition-colors cursor-pointer flex items-center gap-2',
+										'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
 										isSelected
-											? 'bg-cms-primary/10 text-white'
-											: 'text-white/70 hover:bg-white/10 hover:text-white',
+											? 'bg-cms-primary border-cms-primary'
+											: 'border-white/30 bg-white/5',
 									)}
-									data-cms-ui
 								>
-									<span
-										class={cn(
-											'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
-											isSelected
-												? 'bg-cms-primary border-cms-primary'
-												: 'border-white/30 bg-white/5',
-										)}
-									>
-										{isSelected && (
-											<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-											</svg>
-										)}
-									</span>
-									<span class="truncate font-medium">
-										{query ? <HighlightMatch text={opt.label} query={query} /> : opt.label}
-									</span>
-								</button>
-							)
-						})}
-				</div>
-			)}
+									{isSelected && (
+										<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+										</svg>
+									)}
+								</span>
+								<span class="truncate font-medium">
+									{query ? <HighlightMatch text={opt.label} query={query} /> : opt.label}
+								</span>
+							</button>
+						)
+					})}
+			</DropdownPanel>
 		</div>
 	)
 }

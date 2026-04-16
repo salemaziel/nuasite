@@ -17,3 +17,7 @@ export type { ImageHoverState } from './useImageHoverDetection'
 
 export { useBgImageHoverDetection } from './useBgImageHoverDetection'
 export type { BgImageHoverState } from './useBgImageHoverDetection'
+
+export { useClickOutsideEscape } from './useClickOutsideEscape'
+
+export { useSearchFilter } from './useSearchFilter'

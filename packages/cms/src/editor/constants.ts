@@ -136,3 +136,36 @@ export function clampPanelPosition(
 		maxHeight: `${maxHeight}px`,
 	}
 }
+
+/**
+ * Calculate fixed-position style for a dropdown that needs to escape parent overflow clipping.
+ * Positions below the trigger element by default, flipping above when space is insufficient.
+ */
+export function getDropdownPosition(
+	trigger: HTMLElement | null,
+	maxHeight: number,
+	padding = LAYOUT.VIEWPORT_PADDING,
+): Record<string, string> | undefined {
+	if (!trigger) return undefined
+	const rect = trigger.getBoundingClientRect()
+	const spaceBelow = window.innerHeight - rect.bottom - padding
+	const spaceAbove = rect.top - padding
+	const showAbove = spaceBelow < 80 && spaceAbove > spaceBelow
+
+	const style: Record<string, string> = {
+		position: 'fixed',
+		left: `${rect.left}px`,
+		width: `${rect.width}px`,
+		zIndex: String(Z_INDEX.MODAL),
+	}
+
+	if (showAbove) {
+		style.bottom = `${window.innerHeight - rect.top + 4}px`
+		style.maxHeight = `${Math.max(Math.min(maxHeight, spaceAbove), 80)}px`
+	} else {
+		style.top = `${rect.bottom + 4}px`
+		style.maxHeight = `${Math.max(Math.min(maxHeight, spaceBelow), 80)}px`
+	}
+
+	return style
+}

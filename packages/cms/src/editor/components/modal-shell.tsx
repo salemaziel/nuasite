@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact'
 import { Z_INDEX } from '../constants'
+import { cn } from '../lib/cn'
 
 export function ModalBackdrop({ onClose, maxWidth = 'max-w-lg', extraClass, children }: {
 	onClose: () => void
@@ -15,7 +16,7 @@ export function ModalBackdrop({ onClose, maxWidth = 'max-w-lg', extraClass, chil
 			data-cms-ui
 		>
 			<div
-				class={`bg-cms-dark rounded-cms-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] ${maxWidth} w-full border border-white/10 ${extraClass ?? ''}`}
+				class={cn('bg-cms-dark rounded-cms-xl shadow-[0_8px_32px_rgba(0,0,0,0.4)] w-full border border-white/10', maxWidth, extraClass)}
 				onClick={(e) => e.stopPropagation()}
 				data-cms-ui
 			>
@@ -58,7 +59,7 @@ export function ModalFooter({ children }: { children: ComponentChildren }) {
 	)
 }
 
-export function CloseButton({ onClick }: { onClick: () => void }) {
+export function CloseButton({ onClick, size = 'md' }: { onClick: () => void; size?: 'sm' | 'md' }) {
 	return (
 		<button
 			type="button"
@@ -66,22 +67,50 @@ export function CloseButton({ onClick }: { onClick: () => void }) {
 			class="text-white/50 hover:text-white p-1.5 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
 			data-cms-ui
 		>
-			<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<svg class={size === 'sm' ? 'w-4 h-4' : 'w-5 h-5'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 			</svg>
 		</button>
 	)
 }
 
-export function CancelButton({ onClick, label = 'Cancel' }: { onClick: () => void; label?: string }) {
+export function CancelButton({ onClick, label = 'Cancel', className }: { onClick: () => void; label?: string; className?: string }) {
 	return (
 		<button
 			type="button"
 			onClick={onClick}
-			class="px-4 py-2.5 text-sm text-white/80 font-medium rounded-cms-pill hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+			class={cn(
+				'px-4 py-2.5 text-sm text-white/80 font-medium rounded-cms-pill hover:bg-white/10 hover:text-white transition-colors cursor-pointer',
+				className,
+			)}
 			data-cms-ui
 		>
 			{label}
+		</button>
+	)
+}
+
+export function PrimaryButton({ onClick, children, disabled, type = 'button', className }: {
+	onClick?: () => void
+	children: ComponentChildren
+	disabled?: boolean
+	type?: 'button' | 'submit'
+	className?: string
+}) {
+	return (
+		<button
+			type={type}
+			onClick={onClick}
+			disabled={disabled}
+			class={cn(
+				'px-5 py-2.5 text-sm font-medium rounded-cms-pill transition-colors cursor-pointer',
+				'bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover',
+				'disabled:opacity-40 disabled:cursor-not-allowed',
+				className,
+			)}
+			data-cms-ui
+		>
+			{children}
 		</button>
 	)
 }
