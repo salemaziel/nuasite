@@ -13,6 +13,7 @@ import { getErrorCollector, resetErrorCollector } from './error-collector'
 import { ManifestWriter } from './manifest-writer'
 import { createLocalStorageAdapter } from './media/local'
 import type { MediaStorageAdapter } from './media/types'
+import { rehypeCmsMarker } from './rehype-cms-marker'
 import type { CmsFeatures, CmsMarkerOptions, ComponentDefinition } from './types'
 import { createVitePlugin } from './vite-plugin'
 
@@ -283,6 +284,9 @@ export default function nuaCms(options: NuaCmsOptions = {}): AstroIntegration {
 				const needsAliases = !src && !hasPrebuiltBundle
 
 				updateConfig({
+					markdown: {
+						rehypePlugins: [rehypeCmsMarker],
+					},
 					vite: {
 						plugins: vitePlugins,
 						resolve: needsAliases
@@ -365,6 +369,7 @@ export { createS3StorageAdapter as s3Media } from './media/s3'
 export type { MediaFolderItem, MediaItem, MediaListOptions, MediaListResult, MediaStorageAdapter, MediaTypeFilter } from './media/types'
 export type { Color, Date, DateTime, Email, Image, Reference, Textarea, Time, Url } from './prop-types'
 
+export { rehypeCmsMarker } from './rehype-cms-marker'
 export { scanCollections } from './collection-scanner'
 export { getProjectRoot, resetProjectRoot, setProjectRoot } from './config'
 export type { CollectionInfo, MarkdownContent, SourceLocation, VariableReference } from './source-finder'

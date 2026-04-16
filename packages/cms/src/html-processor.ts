@@ -17,6 +17,35 @@ import { generateStableId } from './utils'
 /** Type for parsed HTML element nodes from node-html-parser */
 type HTMLNode = ParsedHTMLElement
 
+/** Check whether any ancestor of `node` (inclusive) has `data-astro-source-file`. */
+function hasAncestorSourceFile(node: HTMLNode): boolean {
+	let current: HTMLNode | null = node
+	while (current) {
+		if (current.getAttribute?.('data-astro-source-file')) return true
+		current = current.parentNode as HTMLNode | null
+	}
+	return false
+}
+
+/** Walk ancestors of `node` (inclusive) to find the nearest source file and line. */
+function findAncestorSourceLocation(node: HTMLNode): { sourceFile?: string; sourceLine?: number } {
+	let current: HTMLNode | null = node
+	while (current) {
+		const file = current.getAttribute?.('data-astro-source-file')
+		if (file) {
+			const line = current.getAttribute?.('data-astro-source-loc') || current.getAttribute?.('data-astro-source-line')
+			let sourceLine: number | undefined
+			if (line) {
+				const parsed = parseInt(line.split(':')[0] ?? '1', 10)
+				if (!Number.isNaN(parsed)) sourceLine = parsed
+			}
+			return { sourceFile: file, sourceLine }
+		}
+		current = current.parentNode as HTMLNode | null
+	}
+	return {}
+}
+
 /**
  * Inline text styling elements that should NOT be marked with CMS IDs.
  * These elements are text formatting and should be part of their parent's content.
@@ -434,14 +463,32 @@ export async function processHtml(
 	// This needs to run BEFORE image marking so we can skip images inside markdown
 	let markdownWrapperNode: HTMLNode | null = null
 
-	// Two strategies:
-	// 1. Dev mode: look for elements with data-astro-source-file containing children without it
-	// 2. Build mode: find element whose first child content matches the start of markdown body
+	// Three strategies in priority order:
+	// 0. Rehype marker: the rehype-cms-marker plugin marks the first rendered element
+	//    with data-cms-markdown-content — its parent is the wrapper
+	// 1. Dev mode heuristic: elements with data-astro-source-file whose children lack it
+	// 2. Build mode: find element whose content matches the markdown body text
 	if (collectionInfo) {
 		const allElements = root.querySelectorAll('*')
 		let foundWrapper = false
 
+		// Strategy 0: Rehype marker — most reliable
+		const markerEl = root.querySelector('[data-cms-markdown-content]')
+		if (markerEl) {
+			markerEl.removeAttribute('data-cms-markdown-content')
+			const parent = markerEl.parentNode as HTMLNode | null
+			if (parent && parent.tagName) {
+				const id = getNextId()
+				parent.setAttribute(attributeName, id)
+				parent.setAttribute('data-cms-markdown', 'true')
+				collectionWrapperId = id
+				markdownWrapperNode = parent
+				foundWrapper = true
+			}
+		}
+
 		// Strategy 1: Dev mode - look for source file attributes
+		if (!foundWrapper) {
 		const SKIP_WRAPPER_TAGS = new Set(['html', 'head', 'body', 'script', 'style', 'meta', 'link'])
 		for (const node of allElements) {
 			const tag = node.tagName?.toLowerCase?.() ?? ''
@@ -459,29 +506,20 @@ export async function processHtml(
 			)
 
 			if (hasMarkdownChildren) {
-				// Check if any ancestor already has been marked as a collection wrapper
-				// We want the innermost wrapper
-				let parent = node.parentNode as HTMLNode | null
-				let hasAncestorWrapper = false
-				while (parent) {
-					if (parent.getAttribute?.(attributeName)?.startsWith('cms-collection-')) {
-						hasAncestorWrapper = true
-						break
-					}
-					parent = parent.parentNode as HTMLNode | null
+				// Remove data-cms-markdown from previous (shallower) wrapper —
+				// we want only the deepest wrapper to have it
+				if (markdownWrapperNode) {
+					markdownWrapperNode.removeAttribute('data-cms-markdown')
 				}
 
-				if (!hasAncestorWrapper) {
-					// Mark this as the collection wrapper using the standard attribute
-					const id = getNextId()
-					node.setAttribute(attributeName, id)
-					node.setAttribute('data-cms-markdown', 'true')
-					collectionWrapperId = id
-					markdownWrapperNode = node
-					foundWrapper = true
-					// Don't break - we want the deepest wrapper, so we'll overwrite
-				}
+				const id = getNextId()
+				node.setAttribute(attributeName, id)
+				node.setAttribute('data-cms-markdown', 'true')
+				collectionWrapperId = id
+				markdownWrapperNode = node
+				foundWrapper = true
 			}
+		}
 		}
 
 		// Strategy 2: Build mode - find the deepest element containing all markdown body text
@@ -636,42 +674,13 @@ export async function processHtml(
 
 		// When skipMarkdownContent is true (collection pages), only mark images
 		// that have source file attributes (from Astro templates, not markdown)
-		if (skipMarkdownContent) {
-			// Check if the image or any ancestor has source file attribute
-			let hasSourceAttr = false
-			let current: HTMLNode | null = node
-			while (current) {
-				if (current.getAttribute?.('data-astro-source-file')) {
-					hasSourceAttr = true
-					break
-				}
-				current = current.parentNode as HTMLNode | null
-			}
-			if (!hasSourceAttr) return
-		}
+		if (skipMarkdownContent && !hasAncestorSourceFile(node)) return
 
 		const id = getNextId()
 		node.setAttribute(attributeName, id)
 		node.setAttribute('data-cms-img', 'true')
 
-		// Try to get source location from the image itself or ancestors
-		let sourceFile: string | undefined
-		let sourceLine: number | undefined
-		let current: HTMLNode | null = node
-		while (current && !sourceFile) {
-			const file = current.getAttribute?.('data-astro-source-file')
-			const line = current.getAttribute?.('data-astro-source-loc') || current.getAttribute?.('data-astro-source-line')
-			if (file) {
-				sourceFile = file
-				if (line) {
-					const lineNum = parseInt(line.split(':')[0] ?? '1', 10)
-					if (!Number.isNaN(lineNum)) {
-						sourceLine = lineNum
-					}
-				}
-			}
-			current = current.parentNode as HTMLNode | null
-		}
+		const { sourceFile, sourceLine } = findAncestorSourceLocation(node)
 
 		// Build image metadata
 		const metadata: ImageMetadata = {
@@ -708,41 +717,13 @@ export async function processHtml(
 		if (!bgMeta) return
 
 		// When skipMarkdownContent is true, only mark elements with source file attributes
-		if (skipMarkdownContent) {
-			let hasSourceAttr = false
-			let current: HTMLNode | null = node
-			while (current) {
-				if (current.getAttribute?.('data-astro-source-file')) {
-					hasSourceAttr = true
-					break
-				}
-				current = current.parentNode as HTMLNode | null
-			}
-			if (!hasSourceAttr) return
-		}
+		if (skipMarkdownContent && !hasAncestorSourceFile(node)) return
 
 		const id = getNextId()
 		node.setAttribute(attributeName, id)
 		node.setAttribute('data-cms-bg-img', 'true')
 
-		// Try to get source location from the element itself or ancestors
-		let sourceFile: string | undefined
-		let sourceLine: number | undefined
-		let current: HTMLNode | null = node
-		while (current && !sourceFile) {
-			const file = current.getAttribute?.('data-astro-source-file')
-			const line = current.getAttribute?.('data-astro-source-loc') || current.getAttribute?.('data-astro-source-line')
-			if (file) {
-				sourceFile = file
-				if (line) {
-					const lineNum = parseInt(line.split(':')[0] ?? '1', 10)
-					if (!Number.isNaN(lineNum)) {
-						sourceLine = lineNum
-					}
-				}
-			}
-			current = current.parentNode as HTMLNode | null
-		}
+		const { sourceFile, sourceLine } = findAncestorSourceLocation(node)
 
 		bgImageEntries.set(id, {
 			metadata: bgMeta,

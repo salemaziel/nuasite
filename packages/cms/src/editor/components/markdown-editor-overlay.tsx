@@ -20,6 +20,8 @@ import {
 import { CreateModeFrontmatter, EditModeFrontmatter } from './frontmatter-fields'
 import { FrontmatterSidebar, partitionFields } from './frontmatter-sidebar'
 import { MarkdownInlineEditor } from './markdown-inline-editor'
+import { CancelButton, PrimaryButton } from './modal-shell'
+import { Spinner } from './spinner'
 
 /**
  * Wrapper component that renders the editor in place of markdown content.
@@ -55,6 +57,15 @@ export function MarkdownEditorOverlay() {
 	const previewTargetRef = useRef<HTMLElement | null>(null)
 	const editorInstanceRef = useRef<Editor | null>(null)
 
+	// Lock page scroll while the modal overlay is visible (not during preview)
+	useEffect(() => {
+		if (!page || isPreview) return
+		const html = document.documentElement
+		const prevOverflow = html.style.overflow
+		html.style.overflow = 'hidden'
+		return () => { html.style.overflow = prevOverflow }
+	}, [!!page, isPreview])
+
 	useEffect(() => {
 		if (isCreateMode || isDataCollection) {
 			setShowFrontmatter(true)
@@ -76,6 +87,13 @@ export function MarkdownEditorOverlay() {
 
 	/** Find the [data-cms-markdown] wrapper element on the actual page (not CMS UI). */
 	const findMarkdownWrapper = useCallback((): HTMLElement | null => {
+		// Use the active element ID to target the correct wrapper directly
+		const activeId = markdownEditorState.value.activeElementId
+		if (activeId) {
+			const el = document.querySelector(`[data-cms-id="${activeId}"]`) as HTMLElement | null
+			if (el) return el
+		}
+		// Fallback: find any markdown wrapper
 		const SKIP_TAGS = new Set(['BODY', 'HTML', 'BUTTON', 'SPAN', 'A'])
 		const candidates = document.querySelectorAll('[data-cms-markdown]:not([data-cms-ui])')
 		for (const c of candidates) {
@@ -348,8 +366,7 @@ export function MarkdownEditorOverlay() {
 				>
 					Back to Editor
 				</button>
-				<button
-					type="button"
+				<PrimaryButton
 					onClick={() => {
 						const currentContent = currentMarkdownPage.value?.content
 						if (currentContent !== undefined) {
@@ -357,12 +374,11 @@ export function MarkdownEditorOverlay() {
 						}
 					}}
 					disabled={isSaving}
-					class="px-3 py-1.5 text-sm bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover rounded-cms-pill transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-					data-cms-ui
+					className="px-3 py-1.5 flex items-center gap-1.5"
 				>
-					{isSaving && <div class="animate-spin rounded-full h-3 w-3 border-2 border-cms-primary-text/30 border-t-cms-primary-text" />}
+					{isSaving && <Spinner size="xs" className="text-cms-primary-text" />}
 					{isSaving ? 'Saving...' : 'Save'}
-				</button>
+				</PrimaryButton>
 			</div>
 		)
 	}
@@ -495,37 +511,13 @@ export function MarkdownEditorOverlay() {
 								Preview
 							</button>
 						)}
-						<button
-							type="button"
-							onClick={handleCancel}
-							class="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-cms-pill transition-colors"
-							data-cms-ui
-						>
-							Cancel
-						</button>
-						{isCreateMode
-							? (
-								<button
-									type="submit"
-									disabled={isSaving}
-									class="px-4 py-2 text-sm bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover rounded-cms-pill transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-									data-cms-ui
-								>
-									{isSaving && <div class="animate-spin rounded-full h-3.5 w-3.5 border-2 border-cms-primary-text/30 border-t-cms-primary-text" />}
-									{isSaving ? 'Creating...' : `Create ${collectionLabel}`}
-								</button>
-							)
-							: (
-								<button
-									type="submit"
-									disabled={isSaving}
-									class="px-4 py-2 text-sm bg-cms-primary text-cms-primary-text hover:bg-cms-primary-hover rounded-cms-pill transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-									data-cms-ui
-								>
-									{isSaving && <div class="animate-spin rounded-full h-3.5 w-3.5 border-2 border-cms-primary-text/30 border-t-cms-primary-text" />}
-									{isSaving ? 'Saving...' : 'Save'}
-								</button>
-							)}
+						<CancelButton onClick={handleCancel} />
+						<PrimaryButton type="submit" disabled={isSaving} className="px-4 py-2 flex items-center gap-2">
+							{isSaving && <Spinner size="sm" className="text-cms-primary-text" />}
+							{isSaving
+								? (isCreateMode ? 'Creating...' : 'Saving...')
+								: (isCreateMode ? `Create ${collectionLabel}` : 'Save')}
+						</PrimaryButton>
 					</div>
 				</div>
 
