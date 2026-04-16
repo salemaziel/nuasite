@@ -16,7 +16,8 @@ import {
 } from '../signals'
 import type { ChangePayload, PageSeoData, PendingSeoChange } from '../types'
 import { ColorField, ComboBoxField, ImageField } from './fields'
-import { CloseButton, ModalBackdrop } from './modal-shell'
+import { CancelButton, CloseButton, ModalBackdrop } from './modal-shell'
+import { Spinner } from './spinner'
 
 const OG_TYPE_OPTIONS = [
 	{ value: 'website', label: 'Website', description: 'Default type for most pages' },
@@ -549,14 +550,7 @@ export function SeoEditor() {
 			{/* Footer */}
 			{hasSeoData && (
 				<div class="flex items-center justify-end gap-3 px-5 py-4 border-t border-white/10">
-					<button
-						type="button"
-						onClick={handleClose}
-						class="px-4 py-2 text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 rounded-cms-pill transition-colors"
-						data-cms-ui
-					>
-						Cancel
-					</button>
+					<CancelButton onClick={handleClose} />
 					<button
 						type="button"
 						onClick={handleSaveAll}
@@ -568,7 +562,7 @@ export function SeoEditor() {
 						}`}
 						data-cms-ui
 					>
-						{isSaving && <span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+						{isSaving && <Spinner />}
 						{isSaving ? 'Saving...' : 'Save Changes'}
 					</button>
 				</div>

@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import { getComponentDefinitions } from '../manifest'
 import { manifest, mdxComponentPickerOpen } from '../signals'
 import { ComponentCard, getDefaultProps } from './component-card'
-import { CancelButton, ModalBackdrop, ModalHeader } from './modal-shell'
+import { CancelButton, ModalBackdrop, ModalHeader, PrimaryButton } from './modal-shell'
 import { PropEditor } from './prop-editor'
 
 export interface MdxComponentPickerProps {
@@ -106,12 +106,9 @@ export function MdxComponentPicker({ onInsert }: MdxComponentPickerProps) {
 						</div>
 						<div class="px-5 py-4 border-t border-white/10 flex gap-2 justify-end">
 							<CancelButton onClick={resetSelection} label="Back" />
-							<button
-								onClick={handleConfirmInsert}
-								class="px-4 py-2.5 bg-cms-primary text-cms-primary-text rounded-cms-pill cursor-pointer hover:bg-cms-primary-hover transition-all font-medium"
-							>
+							<PrimaryButton onClick={handleConfirmInsert} className="px-4">
 								Insert
-							</button>
+							</PrimaryButton>
 						</div>
 					</>
 				)

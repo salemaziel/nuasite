@@ -20,6 +20,7 @@ import { config, mdxComponentPickerOpen, openMediaLibraryWithCallback, resetMark
 import { LinkEditPopover } from './link-edit-popover'
 import { MdxComponentIcon } from './mdx-block-view'
 import { MdxComponentPicker } from './mdx-component-picker'
+import { Spinner } from './spinner'
 
 export interface MarkdownInlineEditorProps {
 	elementId: string
@@ -649,7 +650,7 @@ export function MarkdownInlineEditor({
 				{/* Loading state */}
 				{!isReady && (
 					<div class="absolute inset-0 flex items-center justify-center bg-cms-dark/80">
-						<div class="animate-spin rounded-full h-6 w-6 border-2 border-white/30 border-t-cms-primary" />
+						<Spinner size="lg" className="text-cms-primary" />
 					</div>
 				)}
 			</div>

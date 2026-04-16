@@ -1,8 +1,10 @@
-import { useMemo, useRef, useState } from 'preact/hooks'
+import { useCallback, useMemo, useRef, useState } from 'preact/hooks'
 import { slugify } from '../../shared'
+import { useSearchFilter } from '../hooks/useSearchFilter'
 import { getCollectionEntryOptions } from '../manifest'
 import { manifest, openMediaLibraryWithCallback, pendingCollectionEntries } from '../signals'
 import type { ComponentProp } from '../types'
+import { DropdownPanel } from './fields'
 import { SchemaFrontmatterField } from './frontmatter-fields'
 
 export interface PropEditorProps {
@@ -181,20 +183,14 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 		[collection, currentManifest],
 	)
 	const collectionDef = currentManifest?.collectionDefinitions?.[collection]
-	const containerRef = useRef<HTMLDivElement>(null)
+	const inputRef = useRef<HTMLInputElement>(null)
 	const [search, setSearch] = useState('')
 	const [isOpen, setIsOpen] = useState(false)
 	const [isCreating, setIsCreating] = useState(false)
 	const [newName, setNewName] = useState('')
 	const [formData, setFormData] = useState<Record<string, unknown>>({})
 
-	const filtered = useMemo(
-		() =>
-			search
-				? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()) || o.value.toLowerCase().includes(search.toLowerCase()))
-				: options,
-		[options, search],
-	)
+	const filtered = useSearchFilter(options, search, o => `${o.label} ${o.value}`)
 
 	const selectedLabel = useMemo(
 		() => value ? (options.find(o => o.value === value)?.label ?? value) : '',
@@ -205,6 +201,8 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 		() => collectionDef?.fields.filter(f => !f.hidden && f.name !== 'title' && f.name !== 'name') ?? [],
 		[collectionDef],
 	)
+
+	const closeDropdown = useCallback(() => setIsOpen(false), [])
 
 	const resetCreateForm = () => {
 		setIsCreating(false)
@@ -309,8 +307,9 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 	}
 
 	return (
-		<div class="relative" ref={containerRef}>
+		<div>
 			<input
+				ref={inputRef}
 				type="text"
 				value={isOpen ? search : selectedLabel}
 				onInput={(e) => {
@@ -318,67 +317,67 @@ function ReferenceSelect({ collection, value, required, onChange }: {
 					setIsOpen(true)
 				}}
 				onFocus={() => setIsOpen(true)}
-				onBlur={(e) => {
-					const related = (e as FocusEvent).relatedTarget as Node | null
-					if (containerRef.current && related && containerRef.current.contains(related)) return
-					setIsOpen(false)
-				}}
+				onBlur={() => setTimeout(closeDropdown, 150)}
 				placeholder={`Select ${collection} entry...`}
 				class="w-full px-4 py-2.5 bg-white/10 border border-white/20 text-[13px] text-white placeholder:text-white/40 outline-none focus:border-white/40 focus:ring-1 focus:ring-white/10 transition-all rounded-cms-md"
 			/>
-			{isOpen && (
-				<div class="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-cms-dark border border-white/20 rounded-cms-md shadow-lg">
-					{!required && (
-						<button
-							type="button"
-							onMouseDown={(e) => e.preventDefault()}
-							onClick={() => {
-								onChange('')
-								setSearch('')
-								setIsOpen(false)
-							}}
-							class="w-full px-4 py-2 text-left text-[13px] text-white/50 hover:bg-white/10 transition-colors"
-						>
-							— None —
-						</button>
-					)}
-					{filtered.map((opt) => (
-						<button
-							key={opt.value}
-							type="button"
-							onMouseDown={(e) => e.preventDefault()}
-							onClick={() => {
-								onChange(opt.value)
-								setSearch('')
-								setIsOpen(false)
-							}}
-							class={`w-full px-4 py-2 text-left text-[13px] transition-colors ${
-								opt.value === value ? 'bg-cms-primary/20 text-white' : 'text-white/80 hover:bg-white/10'
-							}`}
-						>
-							<div>{opt.label}</div>
-							{opt.label !== opt.value && <div class="text-[11px] text-white/40 font-mono">{opt.value}</div>}
-						</button>
-					))}
-					{filtered.length === 0 && <div class="px-4 py-2 text-[13px] text-white/40">No entries found</div>}
-					{collectionDef && (
-						<button
-							type="button"
-							onMouseDown={(e) => e.preventDefault()}
-							onClick={() => {
-								setIsCreating(true)
-								setIsOpen(false)
-							}}
-							class="w-full px-4 py-2 text-left text-[13px] text-cms-primary hover:bg-cms-primary/10 transition-colors border-t border-white/10 flex items-center gap-2"
-						>
-							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-							</svg>
-							Create new {collectionDef.label?.toLowerCase() ?? collection}
-						</button>
-					)}
-				</div>
-			)}
+			<DropdownPanel
+				triggerRef={inputRef}
+				isOpen={isOpen}
+				onClose={closeDropdown}
+				maxHeight={192}
+				className="border border-white/20 rounded-cms-md"
+			>
+				{!required && (
+					<button
+						type="button"
+						onMouseDown={(e) => e.preventDefault()}
+						onClick={() => {
+							onChange('')
+							setSearch('')
+							setIsOpen(false)
+						}}
+						class="w-full px-4 py-2 text-left text-[13px] text-white/50 hover:bg-white/10 transition-colors"
+					>
+						— None —
+					</button>
+				)}
+				{filtered.map((opt) => (
+					<button
+						key={opt.value}
+						type="button"
+						onMouseDown={(e) => e.preventDefault()}
+						onClick={() => {
+							onChange(opt.value)
+							setSearch('')
+							setIsOpen(false)
+						}}
+						class={`w-full px-4 py-2 text-left text-[13px] transition-colors ${
+							opt.value === value ? 'bg-cms-primary/20 text-white' : 'text-white/80 hover:bg-white/10'
+						}`}
+					>
+						<div>{opt.label}</div>
+						{opt.label !== opt.value && <div class="text-[11px] text-white/40 font-mono">{opt.value}</div>}
+					</button>
+				))}
+				{filtered.length === 0 && <div class="px-4 py-2 text-[13px] text-white/40">No entries found</div>}
+				{collectionDef && (
+					<button
+						type="button"
+						onMouseDown={(e) => e.preventDefault()}
+						onClick={() => {
+							setIsCreating(true)
+							setIsOpen(false)
+						}}
+						class="w-full px-4 py-2 text-left text-[13px] text-cms-primary hover:bg-cms-primary/10 transition-colors border-t border-white/10 flex items-center gap-2"
+					>
+						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+						</svg>
+						Create new {collectionDef.label?.toLowerCase() ?? collection}
+					</button>
+				)}
+			</DropdownPanel>
 		</div>
 	)
 }

@@ -14,6 +14,7 @@ import {
 } from '../signals'
 import type { LayoutInfo } from '../types'
 import { CancelButton, ModalBackdrop, ModalFooter, ModalHeader } from './modal-shell'
+import { Spinner } from './spinner'
 
 export function CreatePageModal() {
 	const visible = isCreatePageOpen.value
@@ -491,15 +492,6 @@ function PageCreatingOverlay({ phase, slug }: { phase: 'creating' | 'preparing';
 				<div class="text-white/40 text-sm mt-1">/{slug}</div>
 			</div>
 		</div>
-	)
-}
-
-function Spinner() {
-	return (
-		<svg class="w-8 h-8 animate-spin text-cms-primary" viewBox="0 0 24 24" fill="none" data-cms-ui>
-			<circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" />
-			<path class="opacity-80" d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-		</svg>
 	)
 }
 

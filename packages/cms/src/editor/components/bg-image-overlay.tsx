@@ -5,6 +5,7 @@ import { cn } from '../lib/cn'
 import * as signals from '../signals'
 import { saveBgImageEditsToStorage } from '../storage'
 import { FieldLabel, ImageField, SelectField } from './fields'
+import { CloseButton } from './modal-shell'
 
 export interface BgImageOverlayProps {
 	visible: boolean
@@ -232,16 +233,7 @@ export function BgImageOverlay({ visible, rect, element, cmsId }: BgImageOverlay
 									</span>
 								)}
 							</div>
-							<button
-								type="button"
-								onClick={handleClose}
-								class="text-white/50 hover:text-white cursor-pointer p-1.5 hover:bg-white/10 rounded-full transition-colors"
-								data-cms-ui
-							>
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-								</svg>
-							</button>
+							<CloseButton onClick={handleClose} size="sm" />
 						</div>
 
 						{/* Content */}

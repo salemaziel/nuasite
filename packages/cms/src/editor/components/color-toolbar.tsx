@@ -12,6 +12,7 @@ import { CSS, Z_INDEX } from '../constants'
 import { cn } from '../lib/cn'
 import * as signals from '../signals'
 import type { Attribute, AvailableColors } from '../types'
+import { CloseButton } from './modal-shell'
 
 export interface ColorToolbarProps {
 	visible: boolean
@@ -247,15 +248,7 @@ export function ColorToolbar({
 				{/* Header */}
 				<div class="flex items-center justify-between">
 					<span class="font-medium text-white">Element Colors</span>
-					<button
-						type="button"
-						onClick={onClose}
-						class="text-white/50 hover:text-white cursor-pointer p-1.5 hover:bg-white/10 rounded-full transition-colors"
-					>
-						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
+					{onClose && <CloseButton onClick={onClose} size="sm" />}
 				</div>
 
 				{/* Background color section */}

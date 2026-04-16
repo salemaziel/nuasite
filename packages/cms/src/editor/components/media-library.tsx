@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { Z_INDEX } from '../constants'
+import { useSearchFilter } from '../hooks/useSearchFilter'
 import { createMediaFolder, fetchMediaLibrary, fetchProjectImages, uploadMedia } from '../markdown-api'
 import { config, isMediaLibraryOpen, mediaLibraryState, resetMediaLibraryState, showToast } from '../signals'
 import type { MediaFolderItem, MediaItem, MediaTypeFilter } from '../types'
+import { CloseButton, PrimaryButton } from './modal-shell'
+import { Spinner } from './spinner'
 
 const VECTOR_TYPES = new Set(['image/svg+xml', 'image/x-icon'])
 
@@ -187,18 +190,12 @@ export function MediaLibrary() {
 		setShowNewFolderInput(false)
 	}
 
-	// Client-side filtering: both search query AND type filter
-	const filteredItems = useMemo(() => {
-		let items = allItems
-		if (typeFilter !== 'all') {
-			items = items.filter((item) => matchesTypeFilter(item.contentType, typeFilter))
-		}
-		if (searchQuery) {
-			const q = searchQuery.toLowerCase()
-			items = items.filter((item) => item.filename.toLowerCase().includes(q))
-		}
-		return items
-	}, [searchQuery, typeFilter, allItems])
+	// Client-side filtering: type filter, then search query
+	const typeFiltered = useMemo(
+		() => typeFilter === 'all' ? allItems : allItems.filter(item => matchesTypeFilter(item.contentType, typeFilter)),
+		[typeFilter, allItems],
+	)
+	const filteredItems = useSearchFilter(typeFiltered, searchQuery, item => item.filename)
 
 	// Build breadcrumb segments
 	const breadcrumbs = useMemo(() => {
@@ -230,16 +227,7 @@ export function MediaLibrary() {
 				{/* Header */}
 				<div class="flex items-center justify-between p-5 border-b border-white/10">
 					<h2 class="text-lg font-semibold text-white">Media Library</h2>
-					<button
-						type="button"
-						onClick={handleClose}
-						class="text-white/50 hover:text-white p-1.5 hover:bg-white/10 rounded-full transition-colors"
-						data-cms-ui
-					>
-						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
+					<CloseButton onClick={handleClose} />
 				</div>
 
 				{/* Breadcrumbs */}
@@ -307,14 +295,9 @@ export function MediaLibrary() {
 								/>
 							</svg>
 						</button>
-						<button
-							type="button"
-							onClick={handleUploadClick}
-							class="px-5 py-2.5 bg-cms-primary text-cms-primary-text rounded-cms-pill text-sm font-medium hover:bg-cms-primary-hover transition-colors"
-							data-cms-ui
-						>
+						<PrimaryButton onClick={handleUploadClick}>
 							Upload
-						</button>
+						</PrimaryButton>
 						<input
 							ref={fileInputRef}
 							type="file"
@@ -372,14 +355,9 @@ export function MediaLibrary() {
 							class="flex-1 px-3 py-1.5 bg-white/10 border border-white/20 rounded-cms-md text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-white/40"
 							data-cms-ui
 						/>
-						<button
-							type="button"
-							onClick={handleCreateFolder}
-							class="px-3 py-1.5 bg-cms-primary text-cms-primary-text rounded-cms-md text-xs font-medium hover:bg-cms-primary-hover transition-colors"
-							data-cms-ui
-						>
+						<PrimaryButton onClick={handleCreateFolder} className="px-3 py-1.5 rounded-cms-md text-xs">
 							Create
-						</button>
+						</PrimaryButton>
 						<button
 							type="button"
 							onClick={() => {
@@ -414,7 +392,7 @@ export function MediaLibrary() {
 					{isLoading
 						? (
 							<div class="flex items-center justify-center h-48">
-								<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-cms-primary" />
+								<Spinner size="xl" className="text-cms-primary" />
 							</div>
 						)
 						: folders.length === 0 && filteredItems.length === 0

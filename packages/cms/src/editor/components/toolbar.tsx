@@ -5,6 +5,7 @@ import { cn } from '../lib/cn'
 import * as signals from '../signals'
 import { showConfirmDialog } from '../signals'
 import type { CollectionDefinition } from '../types'
+import { Spinner } from './spinner'
 
 export interface ToolbarCallbacks {
 	onEdit: () => void
@@ -229,7 +230,7 @@ export const Toolbar = ({ callbacks, collectionDefinitions }: ToolbarProps) => {
 					{/* Saving indicator */}
 					{isSaving && !showingOriginal && (
 						<div class="flex items-center gap-1.5 px-3 py-2 sm:px-5 sm:py-2.5 text-sm font-medium text-white/80">
-							<span class="inline-block w-3.5 h-3.5 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
+							<Spinner size="sm" className="text-white/80" />
 							<span>Saving</span>
 						</div>
 					)}

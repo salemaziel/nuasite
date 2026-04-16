@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals'
 import { useMemo, useState } from 'preact/hooks'
+import { useSearchFilter } from '../hooks/useSearchFilter'
 import { deleteMarkdownPage } from '../markdown-api'
 import {
 	closeCollectionsBrowser,
@@ -12,7 +13,7 @@ import {
 	selectedBrowserCollection,
 } from '../signals'
 import { ChevronRightIcon, CollectionIcon } from './create-page-modal'
-import { CloseButton, ModalBackdrop, ModalHeader } from './modal-shell'
+import { CloseButton, ModalBackdrop, ModalHeader, PrimaryButton } from './modal-shell'
 
 const deletingEntry = signal<string | null>(null)
 const confirmDeleteSlug = signal<string | null>(null)
@@ -33,11 +34,7 @@ export function CollectionsBrowser() {
 	const selectedDef = selected ? collectionDefinitions[selected] : undefined
 	const entries = selectedDef?.entries ?? EMPTY_ENTRIES
 
-	const filteredEntries = useMemo(() => {
-		if (!search) return entries
-		const q = search.toLowerCase()
-		return entries.filter(e => (e.title || '').toLowerCase().includes(q) || e.slug.toLowerCase().includes(q))
-	}, [entries, search])
+	const filteredEntries = useSearchFilter(entries, search, e => `${e.title ?? ''} ${e.slug}`)
 
 	if (!visible) return null
 
@@ -116,14 +113,9 @@ export function CollectionsBrowser() {
 						<h2 class="text-lg font-semibold text-white">{def.label}</h2>
 					</div>
 					<div class="flex items-center gap-2">
-						<button
-							type="button"
-							onClick={handleAddNew}
-							class="px-3 py-1.5 text-sm font-medium text-black bg-cms-primary hover:bg-cms-primary/80 rounded-cms-pill transition-colors"
-							data-cms-ui
-						>
+						<PrimaryButton onClick={handleAddNew} className="px-3 py-1.5">
 							+ Add New
-						</button>
+						</PrimaryButton>
 						<CloseButton onClick={handleClose} />
 					</div>
 				</div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { HighlightMatch } from './fields'
+import { PrimaryButton } from './modal-shell'
 
 export interface LinkSuggestion {
 	value: string
@@ -189,13 +190,9 @@ export function LinkEditPopover({ initialUrl, suggestions, onApply, onRemove, on
 					)}
 				</div>
 
-				<button
-					type="submit"
-					class="px-3 py-1.5 bg-cms-primary text-cms-primary-text text-[12px] font-medium rounded-cms-sm hover:bg-cms-primary-hover transition-colors shrink-0"
-					data-cms-ui
-				>
+				<PrimaryButton type="submit" className="px-3 py-1.5 text-[12px] rounded-cms-sm shrink-0">
 					Apply
-				</button>
+				</PrimaryButton>
 
 				{onRemove && (
 					<button

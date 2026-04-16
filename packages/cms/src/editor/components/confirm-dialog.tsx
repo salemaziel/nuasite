@@ -1,6 +1,6 @@
 import { cn } from '../lib/cn'
 import { confirmDialogState } from '../signals'
-import { ModalBackdrop } from './modal-shell'
+import { CancelButton, ModalBackdrop, ModalFooter } from './modal-shell'
 
 export function ConfirmDialog() {
 	const state = confirmDialogState.value
@@ -27,16 +27,8 @@ export function ConfirmDialog() {
 				<p class="text-sm text-white/70 leading-relaxed">{state.message}</p>
 			</div>
 
-			{/* Footer */}
-			<div class="flex items-center justify-end gap-3 p-5 pt-4 border-t border-white/10 bg-white/5 rounded-b-cms-xl">
-				<button
-					type="button"
-					onClick={handleCancel}
-					class="px-4 py-2.5 text-sm text-white/80 font-medium rounded-cms-pill hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-					data-cms-ui
-				>
-					{state.cancelLabel}
-				</button>
+			<ModalFooter>
+				<CancelButton onClick={handleCancel} label={state.cancelLabel} />
 				<button
 					type="button"
 					onClick={handleConfirm}
@@ -50,7 +42,7 @@ export function ConfirmDialog() {
 				>
 					{state.confirmLabel}
 				</button>
-			</div>
+			</ModalFooter>
 		</ModalBackdrop>
 	)
 }

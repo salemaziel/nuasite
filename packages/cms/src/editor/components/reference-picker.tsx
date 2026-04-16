@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { clampPanelPosition, Z_INDEX } from '../constants'
+import { useClickOutsideEscape } from '../hooks/useClickOutsideEscape'
+import { useSearchFilter } from '../hooks/useSearchFilter'
 import { getCollectionEntryOptions } from '../manifest'
 import { updateMarkdownPage } from '../markdown-api'
 import { closeReferencePicker, config, manifest, referencePickerState, showToast } from '../signals'
+import { Spinner } from './spinner'
 
 const PANEL_WIDTH = 320
 
@@ -27,11 +30,7 @@ export function ReferencePicker() {
 		}
 	}, [state.isOpen])
 
-	const filtered = useMemo(() => {
-		if (!query) return options
-		const q = query.toLowerCase()
-		return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
-	}, [query, options])
+	const filtered = useSearchFilter(options, query, o => `${o.label} ${o.value}`)
 
 	const currentLabel = useMemo(() => {
 		if (state.isArray) return null
@@ -69,24 +68,7 @@ export function ReferencePicker() {
 		updateReference([...current])
 	}, [state.currentValues, updateReference])
 
-	// Close on outside click or Escape
-	useEffect(() => {
-		if (!state.isOpen) return
-		const onMouseDown = (e: MouseEvent) => {
-			if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-				closeReferencePicker()
-			}
-		}
-		const onKeyDown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') closeReferencePicker()
-		}
-		document.addEventListener('mousedown', onMouseDown)
-		document.addEventListener('keydown', onKeyDown)
-		return () => {
-			document.removeEventListener('mousedown', onMouseDown)
-			document.removeEventListener('keydown', onKeyDown)
-		}
-	}, [state.isOpen])
+	useClickOutsideEscape([panelRef], state.isOpen, closeReferencePicker)
 
 	if (!state.isOpen || !state.cursorPos) return null
 
@@ -113,7 +95,7 @@ export function ReferencePicker() {
 			{saving
 				? (
 					<div class="flex items-center justify-center gap-2 px-4 py-6">
-						<span class="inline-block w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
+						<Spinner className="text-white/80" />
 						<span class="text-sm text-white/80">Updating...</span>
 					</div>
 				)
