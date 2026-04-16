@@ -489,37 +489,37 @@ export async function processHtml(
 
 		// Strategy 1: Dev mode - look for source file attributes
 		if (!foundWrapper) {
-		const SKIP_WRAPPER_TAGS = new Set(['html', 'head', 'body', 'script', 'style', 'meta', 'link'])
-		for (const node of allElements) {
-			const tag = node.tagName?.toLowerCase?.() ?? ''
-			if (SKIP_WRAPPER_TAGS.has(tag)) continue
-			const sourceFile = node.getAttribute('data-astro-source-file')
-			if (!sourceFile) continue
+			const SKIP_WRAPPER_TAGS = new Set(['html', 'head', 'body', 'script', 'style', 'meta', 'link'])
+			for (const node of allElements) {
+				const tag = node.tagName?.toLowerCase?.() ?? ''
+				if (SKIP_WRAPPER_TAGS.has(tag)) continue
+				const sourceFile = node.getAttribute('data-astro-source-file')
+				if (!sourceFile) continue
 
-			// Check if this element has any direct child elements without source file attribute
-			// These would be markdown-rendered elements
-			const childElements = node.childNodes.filter(
-				(child): child is HTMLNode => child.nodeType === 1 && 'tagName' in child,
-			)
-			const hasMarkdownChildren = childElements.some(
-				(child) => !child.getAttribute?.('data-astro-source-file'),
-			)
+				// Check if this element has any direct child elements without source file attribute
+				// These would be markdown-rendered elements
+				const childElements = node.childNodes.filter(
+					(child): child is HTMLNode => child.nodeType === 1 && 'tagName' in child,
+				)
+				const hasMarkdownChildren = childElements.some(
+					(child) => !child.getAttribute?.('data-astro-source-file'),
+				)
 
-			if (hasMarkdownChildren) {
-				// Remove data-cms-markdown from previous (shallower) wrapper —
-				// we want only the deepest wrapper to have it
-				if (markdownWrapperNode) {
-					markdownWrapperNode.removeAttribute('data-cms-markdown')
+				if (hasMarkdownChildren) {
+					// Remove data-cms-markdown from previous (shallower) wrapper —
+					// we want only the deepest wrapper to have it
+					if (markdownWrapperNode) {
+						markdownWrapperNode.removeAttribute('data-cms-markdown')
+					}
+
+					const id = getNextId()
+					node.setAttribute(attributeName, id)
+					node.setAttribute('data-cms-markdown', 'true')
+					collectionWrapperId = id
+					markdownWrapperNode = node
+					foundWrapper = true
 				}
-
-				const id = getNextId()
-				node.setAttribute(attributeName, id)
-				node.setAttribute('data-cms-markdown', 'true')
-				collectionWrapperId = id
-				markdownWrapperNode = node
-				foundWrapper = true
 			}
-		}
 		}
 
 		// Strategy 2: Build mode - find the deepest element containing all markdown body text

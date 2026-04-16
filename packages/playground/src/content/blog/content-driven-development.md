@@ -11,7 +11,7 @@ coverImage: https://images.unsplash.com/photo-1484417894907-623942c8ee29?w=1200&
 draft: true
 ---
 
-Defining collection schemas by hand is tedious. You already have the data in your frontmatter — the CMS should figure out the types from what's there.
+**Defining** collection schemas by hand is tedious. You already have the data in your frontmatter — the CMS should figure out the types from what's there...
 
 ### How inference works
 

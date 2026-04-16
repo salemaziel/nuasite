@@ -63,7 +63,9 @@ export function MarkdownEditorOverlay() {
 		const html = document.documentElement
 		const prevOverflow = html.style.overflow
 		html.style.overflow = 'hidden'
-		return () => { html.style.overflow = prevOverflow }
+		return () => {
+			html.style.overflow = prevOverflow
+		}
 	}, [!!page, isPreview])
 
 	useEffect(() => {
