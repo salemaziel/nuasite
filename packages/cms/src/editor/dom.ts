@@ -217,14 +217,31 @@ export function isStyledSpan(element: HTMLElement): boolean {
  */
 const BLOCK_ELEMENTS = new Set(['div', 'p', 'section', 'article', 'header', 'footer', 'blockquote'])
 
+/**
+ * contentEditable inserts U+00A0 for runs of spaces and at the edges of a text
+ * node — including the space typed just before an inline element — and those have
+ * to come back out as ordinary spaces, or an ordinary space ends up written to
+ * source as a non-breaking one. A lone one between two non-space characters
+ * *within the same text node* is the author's own, from an `&nbsp;` in the source,
+ * and survives the round-trip; the writer splices only what changed, so an
+ * authored `&nbsp;` at a node edge still stays put in the source unless the edit
+ * reaches it.
+ */
+function normalizeEditorSpaces(text: string): string {
+	return text.replace(/\u00a0/g, (_match, offset: number, whole: string) => {
+		const before = whole[offset - 1]
+		const after = whole[offset + 1]
+		if (before === undefined || after === undefined) return ' '
+		return /\s/.test(before) || /\s/.test(after) ? ' ' : '\u00a0'
+	})
+}
+
 function extractTextFromChildNodes(parentNode: HTMLElement): string {
 	let text = ''
 
 	parentNode.childNodes.forEach(node => {
 		if (node.nodeType === Node.TEXT_NODE) {
-			// Normalize non-breaking spaces (\u00a0) that browsers insert in
-			// contentEditable to regular spaces
-			text += (node.nodeValue || '').replace(/\u00a0/g, ' ')
+			text += normalizeEditorSpaces(node.nodeValue || '')
 		} else if (node.nodeType === Node.ELEMENT_NODE) {
 			const element = node as HTMLElement
 			const tagName = element.tagName.toLowerCase()
@@ -250,7 +267,7 @@ function extractTextFromChildNodes(parentNode: HTMLElement): string {
 				}
 			} else {
 				// For all other elements (including styled spans), just get their text content
-				text += (element.textContent || '').replace(/\u00a0/g, ' ')
+				text += normalizeEditorSpaces(element.textContent || '')
 			}
 		}
 	})

@@ -120,6 +120,10 @@ export function notifyLockedElement(): void {
  * phase 2 finished since the editor took its snapshot. Toggle edit mode once
  * afterwards to make the now-unlocked element editable.
  */
+function isUnlockable(entry: ManifestEntry | undefined): boolean {
+	return !!entry?.sourcePath && entry.textResolved !== false
+}
+
 let inFlightLockedFetch: Promise<unknown> | null = null
 function handleLockedClick(event: Event): void {
 	const target = event.currentTarget as HTMLElement | null
@@ -129,7 +133,7 @@ function handleLockedClick(event: Event): void {
 		return
 	}
 
-	if (signals.manifest.value.entries[id]?.sourcePath) {
+	if (isUnlockable(signals.manifest.value.entries[id])) {
 		target.removeAttribute(CSS.LOCKED_ATTRIBUTE)
 		return
 	}
@@ -145,7 +149,7 @@ function handleLockedClick(event: Event): void {
 			})
 	}
 	inFlightLockedFetch.then(() => {
-		if (signals.manifest.value.entries[id]?.sourcePath) {
+		if (isUnlockable(signals.manifest.value.entries[id])) {
 			target.removeAttribute(CSS.LOCKED_ATTRIBUTE)
 		}
 	})
@@ -324,13 +328,23 @@ export async function startEditMode(
 			return
 		}
 
-		// Without a source path, the writer has nowhere to persist text edits — lock
-		// the element so it can't be typed into and the user gets told why on click.
+		// Without a source path the writer has nowhere to persist anything — lock the
+		// element so it can't be typed into and the user gets told why on click.
 		if (!manifestEntry?.sourcePath) {
 			logDebug(config.debug, 'Skipping element without source path:', cmsId)
 			makeElementNonEditable(el)
 			el.setAttribute(CSS.LOCKED_ATTRIBUTE, 'true')
 			el.addEventListener('click', handleLockedClick, { signal: editModeSignal })
+			return
+		}
+
+		// The source finder located the element but not its text, so typing into it
+		// could only fail on save. It stays selectable — its href, other attributes
+		// and colour classes are written from the opening tag and still work — it
+		// just isn't contenteditable.
+		if (manifestEntry.textResolved === false) {
+			logDebug(config.debug, 'Text not resolved to source, attributes only:', cmsId)
+			makeElementNonEditable(el)
 			return
 		}
 

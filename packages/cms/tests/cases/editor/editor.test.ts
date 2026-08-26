@@ -40,6 +40,14 @@ beforeEach(() => {
 				tag: 'p',
 				text: 'Text with no source path',
 			},
+			'unresolved-text-id': {
+				id: 'unresolved-text-id',
+				tag: 'p',
+				text: 'Text the source finder never located',
+				sourcePath: '/test/path3.astro',
+				sourceLine: 4,
+				textResolved: false,
+			},
 		},
 		components: {},
 		componentDefinitions: {},
@@ -339,4 +347,26 @@ test('stopEditMode clears the locked attribute', async () => {
 
 	stopEditMode(() => {})
 	expect(locked.hasAttribute('data-cms-locked')).toBe(false)
+})
+
+test('an entry whose text was never located is not typeable, but stays selectable', async () => {
+	document.body.innerHTML = `
+    <p data-cms-id="unresolved-text-id">Text the source finder never located</p>
+    <p data-cms-id="no-source-id">Text with no source path</p>
+    <p data-cms-id="test-id-1">Editable content</p>
+  `
+
+	await startEditMode(mockConfig, () => {})
+
+	const unresolved = document.querySelector('[data-cms-id="unresolved-text-id"]')!
+	const noSource = document.querySelector('[data-cms-id="no-source-id"]')!
+	const editable = document.querySelector('[data-cms-id="test-id-1"]')!
+
+	// Typing would only fail on save — but its attributes and colour classes are
+	// written from the opening tag and still work, so it must not be locked out of
+	// selection the way an entry with no source path at all is.
+	expect(unresolved.getAttribute('contenteditable')).not.toBe('true')
+	expect(unresolved.hasAttribute('data-cms-locked')).toBe(false)
+	expect(noSource.getAttribute('data-cms-locked')).toBe('true')
+	expect(editable.hasAttribute('data-cms-locked')).toBe(false)
 })

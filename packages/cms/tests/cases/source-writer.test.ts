@@ -105,7 +105,7 @@ describe('applyTextChange', () => {
 		}
 	})
 
-	test('text spanning inline span without htmlValue falls back to newValue', () => {
+	test('text spanning an inline span is not flattened when no htmlValue is sent', () => {
 		const content = '<h2>Hello <span class="accent">world</span></h2>'
 		const result = applyTextChange(
 			content,
@@ -116,10 +116,10 @@ describe('applyTextChange', () => {
 			}),
 			emptyManifest,
 		)
-		expect(result.success).toBe(true)
-		if (result.success) {
-			expect(result.content).toBe('<h2>Hi everyone</h2>')
-		}
+		// The rewrite touches both text runs, so no splice can keep the span —
+		// better to refuse than to silently drop it. The editor sends `htmlValue`
+		// for styled elements, which takes the whole-inner-content path instead.
+		expect(result.success).toBe(false)
 	})
 
 	test('returns error when text not found and no inline elements', () => {
@@ -166,7 +166,8 @@ describe('applyTextChange', () => {
 		)
 		expect(result.success).toBe(true)
 		if (result.success) {
-			expect(result.content).toBe('<p>Tom & Friends</p>')
+			// The source spelled the ampersand as an entity — the rewrite keeps it that way.
+			expect(result.content).toBe('<p>Tom &amp; Friends</p>')
 		}
 	})
 
@@ -518,6 +519,307 @@ date: 2026-03-10
 		if (result.success) {
 			expect(result.content).toBe('<div>\n  <h3>Hi <span class="sm">earth</span></h3>\n  <p>Other</p>\n</div>')
 		}
+	})
+
+	// Non-breaking spaces: the rendered text always carries U+00A0, the source may
+	// spell it `&nbsp;`, `&#160;` or as the raw character.
+	test('matches U+00A0 in text against &nbsp; in source', () => {
+		const content = '<p>Kurzy a&nbsp;publikace</p>'
+		const result = applyTextChange(
+			content,
+			makeChange({
+				sourceSnippet: content,
+				originalValue: 'Kurzy a\u00A0publikace',
+				newValue: 'Kurzy a\u00A0knihy',
+			}),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<p>Kurzy a&nbsp;knihy</p>' })
+	})
+
+	test('matches U+00A0 against the numeric &#160; entity', () => {
+		const content = '<p>Kurzy a&#160;publikace</p>'
+		const result = applyTextChange(
+			content,
+			makeChange({
+				sourceSnippet: content,
+				originalValue: 'Kurzy a\u00A0publikace',
+				newValue: 'Kurzy a\u00A0knihy',
+			}),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<p>Kurzy a&#160;knihy</p>' })
+	})
+
+	test('keeps a source &nbsp; the edit never touched, even when the editor sent a plain space', () => {
+		// contentEditable normalizes some authored nbsp back to a plain space; only the
+		// span that actually changed is rewritten, so the entity survives regardless.
+		const content = '<p>Kurzy a&nbsp;publikace</p>'
+		const result = applyTextChange(
+			content,
+			makeChange({
+				sourceSnippet: content,
+				originalValue: 'Kurzy a publikace',
+				newValue: 'Kurzy a knihy',
+			}),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<p>Kurzy a&nbsp;knihy</p>' })
+	})
+
+	test('saves text whose &nbsp; sits next to an ordinary space', () => {
+		const content = '<p>Text &nbsp;další</p>'
+		const result = applyTextChange(
+			content,
+			makeChange({ sourceSnippet: content, originalValue: 'Text  další', newValue: 'Text  jiné' }),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<p>Text &nbsp;jiné</p>' })
+	})
+
+	test('leaves untouched entities alone when rewriting part of the text', () => {
+		const content = '<p>Tom &amp; Jerry &amp; Spike</p>'
+		const result = applyTextChange(
+			content,
+			makeChange({ sourceSnippet: content, originalValue: 'Tom & Jerry & Spike', newValue: 'Tom & Jerry & Tyke' }),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<p>Tom &amp; Jerry &amp; Tyke</p>' })
+	})
+
+	test('keeps the entity spelling the source used when new text adds a nbsp', () => {
+		const content = '<p>Kurzy a&nbsp;publikace</p>'
+		const result = applyTextChange(
+			content,
+			makeChange({
+				sourceSnippet: content,
+				originalValue: 'Kurzy a\u00A0publikace',
+				newValue: 'Kurzy a\u00A0nove\u00A0publikace',
+			}),
+			emptyManifest,
+		)
+		expect(result.success).toBe(true)
+		if (result.success) {
+			expect(result.content).toBe('<p>Kurzy a&nbsp;nove&nbsp;publikace</p>')
+		}
+	})
+
+	// Inline markup must survive a plain-text edit — the editor only sends
+	// `htmlValue` for entries that allow styling.
+	describe('inner content carrying inline markup', () => {
+		const snippet = '<li><strong class="font-semibold">Pořádáme kurzy</strong> pro zdravotníky.</li>'
+		const text = 'Pořádáme kurzy pro zdravotníky.'
+
+		test('splices a plain-text edit into the run it touched', () => {
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: text, newValue: 'Pořádáme kurzy pro učitele.' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({
+				success: true,
+				content: '<li><strong class="font-semibold">Pořádáme kurzy</strong> pro učitele.</li>',
+			})
+		})
+
+		test('splices an edit that falls inside the styled run', () => {
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: text, newValue: 'Pořádáme školení pro zdravotníky.' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({
+				success: true,
+				content: '<li><strong class="font-semibold">Pořádáme školení</strong> pro zdravotníky.</li>',
+			})
+		})
+
+		test('refuses an edit that spans the markup boundary rather than dropping the tag', () => {
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: text, newValue: 'Úplně jiná věta.' }),
+				emptyManifest,
+			)
+			expect(result.success).toBe(false)
+		})
+
+		test('still replaces the whole inner content when the editor sends html', () => {
+			const result = applyTextChange(
+				snippet,
+				makeChange({
+					sourceSnippet: snippet,
+					originalValue: text,
+					newValue: 'Pořádáme kurzy živě pro zdravotníky.',
+					htmlValue: '<strong class="font-semibold">Pořádáme kurzy živě</strong> pro zdravotníky.',
+					hasStyledContent: true,
+				}),
+				emptyManifest,
+			)
+			expect(result).toEqual({
+				success: true,
+				content: '<li><strong class="font-semibold">Pořádáme kurzy živě</strong> pro zdravotníky.</li>',
+			})
+		})
+	})
+
+	// Frontmatter constants are JavaScript: the rendered text is the *decoded*
+	// literal, and the rewrite has to go back through the same escaping.
+	describe('javascript string literals', () => {
+		test('matches a \\u00A0 escape and keeps the escape on write', () => {
+			const snippet = "const ITEMS = ['Nemají s\\u00A0kým sdílet.', 'první\\nřádek']"
+			const result = applyTextChange(
+				snippet,
+				makeChange({
+					sourceSnippet: snippet,
+					originalValue: 'Nemají s\u00A0kým sdílet.',
+					newValue: 'Nemají s\u00A0kým mluvit.',
+				}),
+				emptyManifest,
+			)
+			expect(result).toEqual({
+				success: true,
+				content: "const ITEMS = ['Nemají s\\u00A0kým mluvit.', 'první\\nřádek']",
+			})
+		})
+
+		test('matches a \\n escape and re-escapes the new line break', () => {
+			const snippet = "const TEXT = 'první\\nřádek'"
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: 'první\nřádek', newValue: 'druhý\nřádek' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: "const TEXT = 'druhý\\nřádek'" })
+		})
+
+		test('collapses a + chain of literals into one literal', () => {
+			const snippet = "const STORY = 'Tématu podpory sourozenců '\n\t+ 'jsem si poprvé všimla v USA.'"
+			const result = applyTextChange(
+				snippet,
+				makeChange({
+					sourceSnippet: snippet,
+					originalValue: 'Tématu podpory sourozenců jsem si poprvé všimla v USA.',
+					newValue: 'Tématu podpory jsem si všimla v USA.',
+				}),
+				emptyManifest,
+			)
+			expect(result).toEqual({
+				success: true,
+				content: "const STORY = 'Tématu podpory jsem si všimla v USA.'",
+			})
+		})
+
+		test('escapes a quote that would otherwise break the literal', () => {
+			const snippet = "const TEXT = 'plain text'"
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: 'plain text', newValue: "it's here" }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: "const TEXT = 'it\\'s here'" })
+		})
+
+		test('leaves markup snippets to the template paths', () => {
+			const snippet = '<a href="/about">About us</a>'
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: 'About us', newValue: 'About them' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: '<a href="/about">About them</a>' })
+		})
+	})
+
+	test('does not re-encode entities inside html the editor sent', () => {
+		const snippet = '<p>Tom &amp; Friends</p>'
+		const result = applyTextChange(
+			snippet,
+			makeChange({
+				sourceSnippet: snippet,
+				originalValue: 'Tom & Friends',
+				newValue: 'Tom & Friends',
+				htmlValue: 'Tom &amp; <span class="x">Friends</span>',
+				hasStyledContent: true,
+			}),
+			emptyManifest,
+		)
+		expect(result).toEqual({
+			success: true,
+			content: '<p>Tom &amp; <span class="x">Friends</span></p>',
+		})
+	})
+
+	test('puts an insertion at a markup boundary outside the inline tag', () => {
+		const snippet = '<li><strong>Kurzy</strong> pro lékaře.</li>'
+		const result = applyTextChange(
+			snippet,
+			makeChange({ sourceSnippet: snippet, originalValue: 'Kurzy pro lékaře.', newValue: 'Kurzy! pro lékaře.' }),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<li><strong>Kurzy</strong>! pro lékaře.</li>' })
+	})
+
+	test('escapes a JS literal even when the text itself contains a <', () => {
+		const snippet = "const label = 'Doprava < 50 km'"
+		const result = applyTextChange(
+			snippet,
+			makeChange({
+				sourcePath: 'src/pages/index.astro',
+				sourceSnippet: snippet,
+				originalValue: 'Doprava < 50 km',
+				newValue: "Doprava < 50 km's",
+			}),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: "const label = 'Doprava < 50 km\\'s'" })
+	})
+
+	test('leaves a quoted YAML value to the yaml path, not the JS one', () => {
+		const snippet = "title: 'Ahoj světe'"
+		const result = applyTextChange(
+			snippet,
+			makeChange({
+				sourcePath: 'src/content/blog/a.md',
+				sourceSnippet: snippet,
+				originalValue: 'Ahoj světe',
+				newValue: 'Ahoj lidi',
+			}),
+			emptyManifest,
+		)
+		// `\'` is not a YAML escape, so the JS literal encoder must not run here.
+		expect(result).toEqual({ success: true, content: "title: 'Ahoj lidi'" })
+	})
+
+	describe('insertions at a markup seam stay outside the inline element', () => {
+		test('before an opening tag', () => {
+			const snippet = '<h2>Hello <span class="a">world</span></h2>'
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: 'Hello world', newValue: 'Hello there world' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: '<h2>Hello there <span class="a">world</span></h2>' })
+		})
+
+		test('at the very end, after a trailing inline child', () => {
+			const snippet = '<h3>foo <strong>bar</strong></h3>'
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: 'foo bar', newValue: 'foo bar!' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: '<h3>foo <strong>bar</strong>!</h3>' })
+		})
+
+		test('at the very start, before a leading inline child', () => {
+			const snippet = '<h3><strong>bar</strong> foo</h3>'
+			const result = applyTextChange(
+				snippet,
+				makeChange({ sourceSnippet: snippet, originalValue: 'bar foo', newValue: '!bar foo' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: '<h3>!<strong>bar</strong> foo</h3>' })
+		})
 	})
 })
 

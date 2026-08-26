@@ -18,6 +18,15 @@ export function getStringValue(node: BabelNode): string | null {
 			return quasis[0]?.value.cooked ?? null
 		}
 	}
+	// `'one ' + 'two'` — a long string broken across source lines still renders as
+	// one value, so the index has to carry the folded result.
+	if (node.type === 'BinaryExpression' && node.operator === '+') {
+		const left = getStringValue(node.left as BabelNode)
+		if (left === null) return null
+		const right = getStringValue(node.right as BabelNode)
+		if (right === null) return null
+		return left + right
+	}
 	return null
 }
 
@@ -73,6 +82,18 @@ function getKeyName(key: BabelNode): string | null {
 }
 
 /**
+ * Last file line of a node, when it ends past `startLine` — a `+` chain or a
+ * value written on the line after its key. The whole span is what an edit has
+ * to be written back into.
+ */
+function endLineOf(node: BabelNode, startLine: number, lineTransformer: LineTransformer): number | undefined {
+	const loc = node.loc as { end: { line: number } } | undefined
+	if (!loc) return undefined
+	const endLine = lineTransformer(loc.end.line)
+	return endLine > startLine ? endLine : undefined
+}
+
+/**
  * Recursively extract properties from an object expression
  * @param objNode - The ObjectExpression node
  * @param parentPath - The full path to this object (e.g., 'config' or 'config.nav')
@@ -99,11 +120,13 @@ export function extractObjectProperties(
 
 		const stringValue = getStringValue(value)
 		if (stringValue !== null) {
+			const endLine = endLineOf(value, propLine, lineTransformer)
 			definitions.push({
 				name: propName,
 				value: stringValue,
 				line: propLine,
 				parentName: parentPath,
+				...(endLine && { endLine }),
 			})
 		}
 
@@ -146,11 +169,13 @@ export function extractArrayElements(
 		// Handle string values in array
 		const elemValue = getStringValue(elem)
 		if (elemValue !== null) {
+			const endLine = endLineOf(elem, elemLine, lineTransformer)
 			definitions.push({
 				name: String(i),
 				value: elemValue,
 				line: elemLine,
 				parentName: parentPath,
+				...(endLine && { endLine }),
 			})
 		}
 
@@ -169,11 +194,13 @@ export function extractArrayElements(
 
 				const stringValue = getStringValue(value)
 				if (stringValue !== null) {
+					const endLine = endLineOf(value, propLine, lineTransformer)
 					definitions.push({
 						name: propName,
 						value: stringValue,
 						line: propLine,
 						parentName: indexPath,
+						...(endLine && { endLine }),
 					})
 				}
 

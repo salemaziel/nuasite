@@ -25,6 +25,7 @@ import {
 	findVariableHitInFile,
 	initializeSearchIndex,
 	isTranslationFilePath,
+	toProjectRelativePath,
 } from './search-index'
 import type { CachedParsedFile, ImageMatch, SourceLocation } from './types'
 
@@ -49,6 +50,60 @@ export function normalizeText(text: string): string {
 		.replace(/<wbr\s*\/?>/gi, '') // Strip <wbr> tags (word break opportunity, no visible content)
 		.replace(/\s+/g, ' ') // Normalize whitespace
 		.toLowerCase()
+}
+
+/**
+ * Does this snippet render the given text directly?
+ *
+ * A raw `includes` is not enough: the rendered text carries decoded entities
+ * (U+00A0 for `&nbsp;`), a literal `<br>` where the source writes
+ * `<br class="..." />`, and no inline markup where the source has `<strong>`.
+ * Missing those makes static template text look like a dynamic expression and
+ * sends the lookup off to the search index, which then resolves the text in
+ * whatever file happens to be indexed first.
+ */
+export function snippetContainsText(snippet: string, text: string): boolean {
+	if (snippet.includes(text)) return true
+
+	// A nested CMS element stands in the text as `{{cms:cms-5}}`; its own source
+	// sits between the surrounding runs, so each run is matched in turn.
+	const segments = text.split(CMS_PLACEHOLDER_PATTERN).map(normalizeText).filter(Boolean)
+	// Nothing but placeholders — the element is a container and its children carry
+	// the text, which the writer resolves through them.
+	if (segments.length === 0) return true
+
+	// Inline children (`<strong>`, styled spans) break the text into pieces that
+	// are only contiguous once the tags are out of the way. Both spellings matter:
+	// `Nua<span>Site</span>` renders `NuaSite`, `a<br>b` renders as two words.
+	const candidates = [
+		normalizeText(snippet),
+		normalizeText(snippet.replace(/<[^>]+>/g, ' ')),
+		normalizeText(snippet.replace(/<[^>]+>/g, '')),
+	]
+	return candidates.some(candidate => containsInOrder(candidate, segments))
+}
+
+const CMS_PLACEHOLDER_PATTERN = /\{\{cms:[^}]+\}\}/
+
+/** Are all of `segments` present in `haystack`, in order and without overlap? */
+function containsInOrder(haystack: string, segments: string[]): boolean {
+	let from = 0
+	for (const segment of segments) {
+		const at = haystack.indexOf(segment, from)
+		if (at === -1) return false
+		from = at + segment.length
+	}
+	return true
+}
+
+/**
+ * The source text a variable definition occupies. Usually one line, but an
+ * initializer split across lines (`'one ' +\n'two'`) needs all of them — the
+ * writer has to see the whole chain to rewrite it.
+ */
+export function definitionSnippet(lines: string[], def: { line: number; endLine?: number }): string {
+	if (!def.endLine || def.endLine <= def.line) return lines[def.line - 1] || ''
+	return lines.slice(def.line - 1, def.endLine).join('\n')
 }
 
 /**
@@ -939,9 +994,10 @@ export async function enhanceManifestWithSourceSnippets(
 
 			if (sourceSnippet) {
 				const trimmedText = entry.text?.trim()
+				const textIsInSnippet = !trimmedText || snippetContainsText(sourceSnippet, trimmedText)
 
 				// Check if text is directly in the snippet (static content)
-				if (trimmedText && !sourceSnippet.includes(trimmedText)) {
+				if (!textIsInSnippet) {
 					// Text from dynamic expression — resolve via variable definitions
 					const cached = await getCachedParsedFile(filePath)
 					if (cached) {
@@ -950,7 +1006,7 @@ export async function enhanceManifestWithSourceSnippets(
 							def => normalizeText(def.value) === normalizedSearch,
 						)
 						if (matchingDef) {
-							const defSnippet = lines[matchingDef.line - 1] || ''
+							const defSnippet = definitionSnippet(lines, matchingDef)
 							const sourceHash = generateSourceHash(defSnippet)
 							return [id, {
 								...entry,
@@ -1075,14 +1131,20 @@ export async function enhanceManifestWithSourceSnippets(
 
 					// Last resort — consult the text index (covers i18n JSON dictionaries
 					// and any other indexed text that shares no tag with the rendered element).
+					// Astro stamps `data-astro-source-file` with an absolute path while the
+					// index stores relative ones, so both sides are normalized before the
+					// comparison — otherwise a same-file hit always looks like a new location
+					// and overwrites the coordinates Astro already gave us.
 					const indexHit = findInTextIndex(trimmedText, entry.tag, pageFiles)
-					if (indexHit && indexHit.file !== entry.sourcePath) {
+					if (indexHit && indexHit.file !== toProjectRelativePath(entry.sourcePath)) {
 						const resolved = await applyTranslationSource(entry, indexHit, attributes, colorClasses)
 						return [id, resolved] as const
 					}
 				}
 
-				// Original static content path
+				// Original static content path. Reaching here with text that isn't in the
+				// snippet means every lookup above came up empty — the editor locks the
+				// entry instead of letting the user type into an edit that can't be saved.
 				const sourceHash = generateSourceHash(sourceSnippet)
 				return [id, {
 					...entry,
@@ -1090,6 +1152,7 @@ export async function enhanceManifestWithSourceSnippets(
 					attributes,
 					colorClasses,
 					sourceHash,
+					...(textIsInSnippet ? {} : { textResolved: false }),
 				}] as const
 			}
 		} catch {
@@ -1389,7 +1452,7 @@ async function resolveImageExpression(
 		def => normalizeText(def.value) === normalizedSrc,
 	)
 	if (matchingDef) {
-		const defSnippet = cached.lines[matchingDef.line - 1] || ''
+		const defSnippet = definitionSnippet(cached.lines, matchingDef)
 		const sourceHash = generateSourceHash(defSnippet)
 		return {
 			...entry,

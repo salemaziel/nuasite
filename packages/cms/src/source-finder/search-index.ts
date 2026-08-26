@@ -23,7 +23,7 @@ import {
 	setCollectionTextIndex,
 	setSearchIndexInitialized,
 } from './cache'
-import { extractAstroImageOriginalUrl, extractImageSnippet, extractInnerHtmlFromSnippet, normalizeText } from './snippet-utils'
+import { definitionSnippet, extractAstroImageOriginalUrl, extractImageSnippet, normalizeText } from './snippet-utils'
 import type { CachedParsedFile, ImageIndexEntry, SearchIndexEntry, SourceLocation } from './types'
 
 /** Collection data files live under this path — used to prefer them over templates */
@@ -439,7 +439,7 @@ export function indexFileContent(cached: CachedParsedFile, relFile: string): voi
 							addToTextSearchIndex({
 								file: relFile,
 								line: def.line,
-								snippet: cached.lines[def.line - 1] || '',
+								snippet: definitionSnippet(cached.lines, def),
 								type: 'variable',
 								variableName: defPath,
 								definitionLine: def.line,
@@ -458,9 +458,10 @@ export function indexFileContent(cached: CachedParsedFile, relFile: string): voi
 			}
 
 			if (normalizedText && normalizedText.length >= 2) {
-				// Index static text content
-				const completeSnippet = extractCompleteTagSnippet(cached.lines, line - 1, tag)
-				const snippet = extractInnerHtmlFromSnippet(completeSnippet, tag) ?? completeSnippet
+				// Index static text content. The snippet keeps its wrapping tag: the
+				// writer's fallbacks (inline-child replacement, `<br>` normalization)
+				// need the complete element to reason about what is inside it.
+				const snippet = extractCompleteTagSnippet(cached.lines, line - 1, tag)
 				const openingTagInfo = extractOpeningTagWithLine(cached.lines, line - 1, tag)
 
 				addToTextSearchIndex({
@@ -568,7 +569,7 @@ function indexExpressionTextRef(
 		addToTextSearchIndex({
 			file: relFile,
 			line: def.line,
-			snippet: cached.lines[def.line - 1] || '',
+			snippet: definitionSnippet(cached.lines, def),
 			type: 'variable',
 			variableName: defPath,
 			definitionLine: def.line,
@@ -1287,6 +1288,12 @@ interface RankedMatches {
 	page?: SourceLocation
 	other?: SourceLocation
 }
+
+/** Best candidate found so far, in priority order. */
+function bestMatch(matches: RankedMatches): SourceLocation | undefined {
+	return matches.page ?? matches.other
+}
+
 function rankAndStash(
 	file: string,
 	result: SourceLocation,
@@ -1350,7 +1357,7 @@ export function findVariableHitInFile(
  * Convert a file path to project-relative form, accepting either absolute
  * paths (as Astro stamps them) or already-relative paths (as the index uses).
  */
-function toProjectRelativePath(file: string): string {
+export function toProjectRelativePath(file: string): string {
 	if (!path.isAbsolute(file)) return file
 	return path.relative(getProjectRoot(), file)
 }
@@ -1384,7 +1391,7 @@ export function findInTextIndex(
 		}
 	}
 	if (translationHit) return translationHit
-	const sameTag = matches.page ?? matches.other
+	const sameTag = bestMatch(matches)
 	if (sameTag) return sameTag
 
 	if (normalizedSearch.length > 10) {
@@ -1395,7 +1402,7 @@ export function findInTextIndex(
 			const collectionHit = rankAndStash(entry.file, textEntryToLocation(entry), pageFiles, matches)
 			if (collectionHit) return collectionHit
 		}
-		const partial = matches.page ?? matches.other
+		const partial = bestMatch(matches)
 		if (partial) return partial
 	}
 
@@ -1405,7 +1412,7 @@ export function findInTextIndex(
 		if (collectionHit) return collectionHit
 	}
 
-	return matches.page ?? matches.other
+	return bestMatch(matches)
 }
 
 /**
@@ -1492,5 +1499,5 @@ export function findInImageIndex(
 		if (collectionHit) return collectionHit
 	}
 
-	return matches.page ?? matches.other
+	return bestMatch(matches)
 }

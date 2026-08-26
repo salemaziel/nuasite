@@ -5,11 +5,112 @@
  * including static text, variables, and multiline content.
  */
 
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 import { findSourceLocation } from '../../../src/source-finder'
+import { snippetContainsText } from '../../../src/source-finder/snippet-utils'
 import { setupAstroProjectStructure, withTempDir } from '../../utils'
 
+// Deciding "static template text" vs. "dynamic expression" hinges on this — a
+// false negative sends the lookup to the search index, which resolves the text
+// in whichever file was indexed first.
+describe('snippetContainsText', () => {
+	test('matches plain text directly', () => {
+		expect(snippetContainsText('<h1>Hello World</h1>', 'Hello World')).toBe(true)
+	})
+
+	test('matches rendered U+00A0 against a source &nbsp;', () => {
+		expect(snippetContainsText('<a href="/about">About&nbsp;us</a>', 'About\u00A0us')).toBe(true)
+	})
+
+	test('matches a rendered <br> against <br class="..." />', () => {
+		expect(
+			snippetContainsText(
+				'<h1>Když onemocní dítě, bojuje<br class="hidden lg:inline" /> celá rodina.</h1>',
+				'Když onemocní dítě, bojuje<br> celá rodina.',
+			),
+		).toBe(true)
+	})
+
+	test('matches text split by an inline <strong>', () => {
+		expect(
+			snippetContainsText(
+				'<li><strong class="font-semibold">Pořádáme kurzy</strong> pro zdravotníky.</li>',
+				'Pořádáme kurzy pro zdravotníky.',
+			),
+		).toBe(true)
+	})
+
+	test('does not match text rendered from an expression', () => {
+		expect(snippetContainsText('<p>{STORY}</p>', 'Tématu podpory sourozenců')).toBe(false)
+	})
+
+	test('matches around a nested CMS child placeholder', () => {
+		expect(
+			snippetContainsText(
+				'<p>Read more <a href="/docs">here</a>.</p>',
+				'Read more {{cms:cms-5}}.',
+			),
+		).toBe(true)
+	})
+
+	test('matches an element that is nothing but a nested child', () => {
+		expect(snippetContainsText('<p><a href="/docs">here</a></p>', '{{cms:cms-5}}')).toBe(true)
+	})
+
+	test('matches inline markup with no whitespace at the seam', () => {
+		expect(snippetContainsText('<h2>Nua<span class="text-primary">Site</span></h2>', 'NuaSite')).toBe(true)
+	})
+
+	test('requires the runs to appear in order', () => {
+		expect(
+			snippetContainsText('<p>second <a href="/x">link</a> first</p>', 'first {{cms:cms-5}} second'),
+		).toBe(false)
+	})
+})
+
 withTempDir('findSourceLocation - Text Finding', (getCtx) => {
+	test('covers the whole value when an object property spans lines', async () => {
+		const ctx = getCtx()
+		await setupAstroProjectStructure(ctx)
+		await ctx.writeFile(
+			'src/components/Config.astro',
+			`---
+const CONFIG = {
+	body: 'Tématu podpory '
+		+ 'sourozenců.',
+}
+---
+<p>{CONFIG.body}</p>
+`,
+		)
+
+		const result = await findSourceLocation('Tématu podpory sourozenců.', 'p')
+
+		expect(result?.file).toBe('src/components/Config.astro')
+		expect(result?.snippet).toContain("'sourozenců.'")
+	})
+
+	test('finds text built from a + chain of string literals', async () => {
+		const ctx = getCtx()
+		await setupAstroProjectStructure(ctx)
+		await ctx.writeFile(
+			'src/components/Story.astro',
+			`---
+const STORY = 'Tématu podpory sourozenců '
+	+ 'jsem si poprvé všimla v USA.'
+---
+<p>{STORY}</p>
+`,
+		)
+
+		const result = await findSourceLocation('Tématu podpory sourozenců jsem si poprvé všimla v USA.', 'p')
+
+		expect(result?.file).toBe('src/components/Story.astro')
+		expect(result?.line).toBe(2)
+		// The whole chain is the edit target, not just its first line.
+		expect(result?.snippet).toContain("'jsem si poprvé všimla v USA.'")
+	})
+
 	test('should find simple text in component', async () => {
 		const ctx = getCtx()
 		await setupAstroProjectStructure(ctx)
