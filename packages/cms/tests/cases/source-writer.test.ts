@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { parse as parseYaml } from 'yaml'
 import type { ChangePayload } from '../../src/editor/types'
 import { applyAttributeChanges, applyTextChange } from '../../src/handlers/source-writer'
 import type { CmsManifest } from '../../src/types'
@@ -413,6 +414,7 @@ describe('applyTextChange', () => {
 		const result = applyTextChange(
 			content,
 			makeChange({
+				sourcePath: 'src/content/blog/a.md',
 				sourceSnippet: 'title: Dobrovolníci po celé republice spojí síly a uklidí českou krajinu. Budete \n  u toho?',
 				originalValue: 'Dobrovolníci po celé republice spojí síly a uklidí českou krajinu. Budete u toho?',
 				newValue: 'Nový titulek',
@@ -437,6 +439,7 @@ date: 2026-03-10
 		const result = applyTextChange(
 			content,
 			makeChange({
+				sourcePath: 'src/content/blog/a.md',
 				sourceSnippet:
 					'excerpt: I letos se čeká Českou republiku tradiční jarní úklid. Tisíce\n  dobrovolníků a dobrovolnic se 28. března 2026 sejdou, aby v rámci akce Ukliďme\n  Česko společně uklidili to, co do veřejného prostoru nepatří. Přidejte se k\n  nim také!',
 				originalValue:
@@ -459,6 +462,7 @@ date: 2026-03-10
 		const result = applyTextChange(
 			content,
 			makeChange({
+				sourcePath: 'src/content/blog/a.md',
 				sourceSnippet: 'title: Hello world',
 				originalValue: 'Hello world',
 				newValue: 'Hello universe',
@@ -473,6 +477,7 @@ date: 2026-03-10
 		const result = applyTextChange(
 			content,
 			makeChange({
+				sourcePath: 'src/content/blog/a.md',
 				sourceSnippet: 'description: >-\n  This is a multi-line\n  folded description',
 				originalValue: 'This is a multi-line folded description',
 				newValue: 'A short description',
@@ -490,6 +495,7 @@ date: 2026-03-10
 		const result = applyTextChange(
 			content,
 			makeChange({
+				sourcePath: 'src/content/blog/a.md',
 				sourceSnippet: 'title: "A title with special chars: colons, #hashes,\n  and continuation"',
 				originalValue: 'A title with special chars: colons, #hashes, and continuation',
 				newValue: 'Simple title',
@@ -730,6 +736,16 @@ date: 2026-03-10
 		})
 	})
 
+	test('a $ in the new value is not read as a replacement pattern', () => {
+		const snippet = '<h3>Cena</h3>'
+		const result = applyTextChange(
+			snippet,
+			makeChange({ sourceSnippet: snippet, originalValue: 'Cena', newValue: 'Cena $& sleva' }),
+			emptyManifest,
+		)
+		expect(result).toEqual({ success: true, content: '<h3>Cena $& sleva</h3>' })
+	})
+
 	test('does not re-encode entities inside html the editor sent', () => {
 		const snippet = '<p>Tom &amp; Friends</p>'
 		const result = applyTextChange(
@@ -788,6 +804,301 @@ date: 2026-03-10
 		)
 		// `\'` is not a YAML escape, so the JS literal encoder must not run here.
 		expect(result).toEqual({ success: true, content: "title: 'Ahoj lidi'" })
+	})
+
+	describe('yaml frontmatter values', () => {
+		const entryFile = (frontmatter: string) => `---\n${frontmatter}\n---\n\nBody text.\n\nPoznámka: tohle je věta, ne pole.\n`
+
+		function editFrontmatter(frontmatter: string, snippet: string, originalValue: string, newValue: string) {
+			const result = applyTextChange(
+				entryFile(frontmatter),
+				makeChange({ sourcePath: 'src/content/blog/a.md', sourceLine: 2, sourceSnippet: snippet, originalValue, newValue }),
+				emptyManifest,
+			)
+			if (!result.success) throw new Error(result.error)
+			return result.content
+		}
+
+		/** Round-trip through the parser — the point is that the entry still loads, not how it is spelled. */
+		function frontmatterOf(content: string): Record<string, unknown> {
+			const match = /^---\n([\s\S]*?)\n---/.exec(content)
+			if (!match) throw new Error('no frontmatter block')
+			return parseYaml(match[1]!) as Record<string, unknown>
+		}
+
+		// Every row here wrote invalid YAML — or silently the wrong value — while reporting success.
+		const cases: Array<{ name: string; snippet: string; key: string; original: string; next: string }> = [
+			{ name: 'apostrophe into a single-quoted value', snippet: "title: 'Ahoj světe'", key: 'title', original: 'Ahoj světe', next: "Dnes' novinka" },
+			{ name: 'double quote into a double-quoted value', snippet: 'title: "Ahoj světe"', key: 'title', original: 'Ahoj světe', next: 'Řekl "ahoj"' },
+			{ name: 'colon into a plain value', snippet: 'title: Ahoj světe', key: 'title', original: 'Ahoj světe', next: 'Ahoj: světe' },
+			{ name: 'leading dash into a plain value', snippet: 'title: Ahoj světe', key: 'title', original: 'Ahoj světe', next: '- světe' },
+			{
+				name: 'colon into a second field',
+				snippet: 'description: Naše služby',
+				key: 'description',
+				original: 'Naše služby',
+				next: 'Naše služby: přehled',
+			},
+			{ name: 'hash is not a comment', snippet: 'title: Ahoj světe', key: 'title', original: 'Ahoj světe', next: 'Sleva #1' },
+			{ name: 'pasted line break survives', snippet: "title: 'Ahoj světe'", key: 'title', original: 'Ahoj světe', next: 'Ahoj\nsvětě' },
+		]
+
+		for (const { name, snippet, key, original, next } of cases) {
+			test(name, () => {
+				expect(frontmatterOf(editFrontmatter(snippet, snippet, original, next))[key]).toBe(next)
+			})
+		}
+
+		test('an ordinary value stays an unquoted plain scalar', () => {
+			expect(editFrontmatter('title: Ahoj světe', 'title: Ahoj světe', 'Ahoj světe', 'Ahoj lidi')).toContain('\ntitle: Ahoj lidi\n')
+		})
+
+		test('a numeric field keeps its type', () => {
+			const content = editFrontmatter('price: 100', 'price: 100', '100', '120')
+			expect(content).toContain('\nprice: 120\n')
+			expect(frontmatterOf(content).price).toBe(120)
+		})
+
+		test('a nested key keeps its indentation across a block scalar', () => {
+			const content = editFrontmatter('meta:\n  title: Ahoj světe', '  title: Ahoj světe', 'Ahoj světe', 'Ahoj\nsvětě')
+			expect((frontmatterOf(content).meta as Record<string, unknown>).title).toBe('Ahoj\nsvětě')
+		})
+
+		test('a body line shaped like a mapping entry is left alone', () => {
+			const snippet = 'Poznámka: tohle je věta, ne pole.'
+			const content = editFrontmatter('title: Ahoj světe', snippet, 'tohle je věta, ne pole.', 'tohle je: jiná věta')
+			expect(content).toContain('Poznámka: tohle je: jiná věta')
+		})
+
+		// Everything on the line that is not the value has to survive the rewrite.
+		test('keeps a trailing comment', () => {
+			const snippet = 'title: Ahoj světe # ponechat'
+			const content = editFrontmatter(snippet, snippet, 'Ahoj světe', 'Ahoj lidi')
+			expect(content).toContain('title: Ahoj lidi # ponechat')
+			expect(frontmatterOf(content).title).toBe('Ahoj lidi')
+		})
+
+		test('keeps an anchor, so its alias still resolves', () => {
+			const content = editFrontmatter('title: &t Ahoj světe\nheading: *t', 'title: &t Ahoj světe', 'Ahoj světe', 'Ahoj lidi')
+			expect(content).toContain('title: &t Ahoj lidi')
+			expect(frontmatterOf(content)).toEqual({ title: 'Ahoj lidi', heading: 'Ahoj lidi' })
+		})
+
+		test('a compact mapping inside a sequence keeps its dash', () => {
+			const content = editFrontmatter('items:\n  - title: Ahoj světe', '  - title: Ahoj světe', 'Ahoj světe', 'Ahoj: světe')
+			expect(frontmatterOf(content).items).toEqual([{ title: 'Ahoj: světe' }])
+		})
+
+		test('a $ in the new value is not read as a replacement pattern', () => {
+			expect(frontmatterOf(editFrontmatter('title: Ahoj světe', 'title: Ahoj světe', 'Ahoj světe', 'cena $& sleva')).title)
+				.toBe('cena $& sleva')
+		})
+
+		test('a numeric key survives a block scalar', () => {
+			const content = editFrontmatter('2024: Ahoj světe', '2024: Ahoj světe', 'Ahoj světe', 'Ahoj\nsvětě')
+			expect(frontmatterOf(content)['2024']).toBe('Ahoj\nsvětě')
+		})
+
+		test('a value ending in a blank line keeps it', () => {
+			const content = editFrontmatter('title: Ahoj světe', 'title: Ahoj světe', 'Ahoj světe', 'Ahoj\n\n')
+			expect(frontmatterOf(content).title).toBe('Ahoj\n\n')
+		})
+
+		test('a pasted value whose first line is indented keeps its indentation', () => {
+			const content = editFrontmatter('title: Ahoj světe', 'title: Ahoj světe', 'Ahoj světe', ' odsazeno\ndalší')
+			expect(frontmatterOf(content).title).toBe(' odsazeno\ndalší')
+		})
+
+		test('an indented value ending in a blank line keeps both', () => {
+			const content = editFrontmatter('title: Ahoj světe', 'title: Ahoj světe', 'Ahoj světe', '  odsazeno\ndalší\n\n')
+			expect(frontmatterOf(content).title).toBe('  odsazeno\ndalší\n\n')
+		})
+
+		test('a plain item in a sequence stays a string', () => {
+			const content = editFrontmatter('tags:\n  - Ahoj', '  - Ahoj', 'Ahoj', 'Ahoj: světe')
+			expect(frontmatterOf(content).tags).toEqual(['Ahoj: světe'])
+		})
+
+		test('a quoted key in a .yaml file is still editable', () => {
+			const result = applyTextChange(
+				'"title": Ahoj světe\n',
+				makeChange({ sourcePath: 'src/data/site.yaml', sourceSnippet: '"title": Ahoj světe', originalValue: 'Ahoj světe', newValue: 'Sleva #1' }),
+				emptyManifest,
+			)
+			if (!result.success) throw new Error(result.error)
+			expect(parseYaml(result.content).title).toBe('Sleva #1')
+		})
+
+		test('a CRLF entry is quoted like any other', () => {
+			const result = applyTextChange(
+				'---\r\ntitle: Ahoj světe\r\n---\r\n\r\nBody.\r\n',
+				makeChange({ sourcePath: 'src/content/blog/a.md', sourceSnippet: 'title: Ahoj světe\r', originalValue: 'Ahoj světe', newValue: 'Sleva #1' }),
+				emptyManifest,
+			)
+			if (!result.success) throw new Error(result.error)
+			expect(result.content).toContain('title: "Sleva #1"\r\n')
+			expect(parseYaml(/^---\r\n([\s\S]*?)\r\n---/.exec(result.content)![1]!).title).toBe('Sleva #1')
+		})
+
+		test('the right field of a multi-field snippet is the one rewritten', () => {
+			const content = editFrontmatter('heading: Ahoj\ntitle: Ahoj světe', 'heading: Ahoj\ntitle: Ahoj světe', 'Ahoj světe', 'Ahoj: světe')
+			expect(frontmatterOf(content)).toEqual({ heading: 'Ahoj', title: 'Ahoj: světe' })
+		})
+
+		test('an edit no field answers to uniquely is refused, not guessed at', () => {
+			// Both fields hold `Ahoj`, and nothing in the snippet says which was edited.
+			const result = applyTextChange(
+				entryFile('heading: Ahoj\ndescription: Ahoj'),
+				makeChange({
+					sourcePath: 'src/content/blog/a.md',
+					sourceSnippet: 'heading: Ahoj\ndescription: Ahoj',
+					originalValue: 'Ahoj',
+					newValue: 'Sleva #1',
+				}),
+				emptyManifest,
+			)
+			expect(result.success).toBe(false)
+		})
+
+		// The guard on the verbatim fall-through has to let ordinary edits through:
+		// most of them do not leave the snippet reading `key: <the whole new text>`.
+		test('an edit against a trimmed value still writes', () => {
+			// The browser hands back the rendered text, so the padding never comes with it.
+			const content = editFrontmatter('title: "Ahoj lidi "', 'title: "Ahoj lidi "', 'Ahoj lidi', 'Nazdar')
+			expect(frontmatterOf(content).title).toBe('Nazdar ')
+		})
+
+		test('a field under a parent key still writes', () => {
+			const content = editFrontmatter('hero:\n  title: Ahoj', 'hero:\n  title: Ahoj', 'Ahoj', 'Nazdar')
+			expect(frontmatterOf(content).hero).toEqual({ title: 'Nazdar' })
+		})
+
+		test('the second field of an object list item still writes', () => {
+			const content = editFrontmatter('items:\n  - title: Ahoj\n    desc: Popis', '  - title: Ahoj\n    desc: Popis', 'Popis', 'Nový popis')
+			expect(frontmatterOf(content).items).toEqual([{ title: 'Ahoj', desc: 'Nový popis' }])
+		})
+
+		test('the second item of a string list still writes', () => {
+			const content = editFrontmatter('tags:\n  - Ahoj\n  - Nazdar', 'tags:\n  - Ahoj\n  - Nazdar', 'Nazdar', 'Čau')
+			expect(frontmatterOf(content).tags).toEqual(['Ahoj', 'Čau'])
+		})
+
+		test('a run of text inside a longer value still writes', () => {
+			const content = editFrontmatter('title: Ahoj lidi', 'title: Ahoj lidi', 'lidi', 'světe')
+			expect(frontmatterOf(content).title).toBe('Ahoj světe')
+		})
+
+		test('a list item that would otherwise become a mapping is quoted', () => {
+			const content = editFrontmatter('tags:\n  - Ahoj\n  - Nazdar', 'tags:\n  - Ahoj\n  - Nazdar', 'Nazdar', 'Nazdar: x')
+			expect(frontmatterOf(content).tags).toEqual(['Ahoj', 'Nazdar: x'])
+		})
+
+		test('a value Astro would read as a date is quoted', () => {
+			const content = editFrontmatter('title: Ahoj světe', 'title: Ahoj světe', 'Ahoj světe', '2026-04-01')
+			expect(content).toContain('title: "2026-04-01"')
+			expect(frontmatterOf(content).title).toBe('2026-04-01')
+		})
+
+		test('a leading fenced block is frontmatter, as Astro reads it', () => {
+			// Astro's own `frontmatterRE` takes everything between the first `---` and the
+			// next one as YAML, whatever it looks like — so this is a field, not a
+			// paragraph between two rules, and it is quoted like any other field.
+			const result = applyTextChange(
+				'---\n\nPozn: tohle je věta.\n\n---\n\nDalší\n',
+				makeChange({
+					sourcePath: 'src/content/blog/a.md',
+					sourceSnippet: 'Pozn: tohle je věta.',
+					originalValue: 'tohle je věta.',
+					newValue: 'Sleva #1',
+				}),
+				emptyManifest,
+			)
+			if (!result.success) throw new Error(result.error)
+			expect(result.content).toContain('Pozn: "Sleva #1"')
+		})
+
+		test('a `+++` block is TOML and is left alone', () => {
+			const result = applyTextChange(
+				'+++\ntitle = "Ahoj"\n+++\n\nBody.\n',
+				makeChange({
+					sourcePath: 'src/content/blog/a.md',
+					sourceSnippet: 'title = "Ahoj"',
+					originalValue: 'Ahoj',
+					newValue: 'Sleva #1',
+				}),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: '+++\ntitle = "Sleva #1"\n+++\n\nBody.\n' })
+		})
+
+		test('a price with cents is written as typed', () => {
+			// `129.90` reads back as 129.9 — the same number, canonically spelled.
+			const content = editFrontmatter('price: 100', 'price: 100', '100', '129.90')
+			expect(content).toContain('price: 129.90')
+			expect(frontmatterOf(content).price).toBe(129.9)
+		})
+
+		test('a date field stays a date', () => {
+			// Quoting is what protects a string field — and what would break this one.
+			const content = editFrontmatter('date: 2026-03-10', 'date: 2026-03-10', '2026-03-10', '2026-04-01')
+			expect(content).toContain('date: 2026-04-01')
+		})
+
+		test('a numeric field takes numbers, not YAML that happens to start with one', () => {
+			// `5 # levne` parses as 5, so a laxer check would splice a comment into the file.
+			const content = editFrontmatter('price: 120', 'price: 120', '120', '5 # levne')
+			expect(frontmatterOf(content).price).toBe('5 # levne')
+		})
+
+		test('an anchor typed into a numeric field is text, not an anchor', () => {
+			const content = editFrontmatter('price: 120', 'price: 120', '120', '&a 130')
+			expect(frontmatterOf(content).price).toBe('&a 130')
+		})
+
+		test('clearing a nested field writes an empty string, not a null', () => {
+			const content = editFrontmatter('hero:\n  title: Ahoj', 'hero:\n  title: Ahoj', 'Ahoj', '')
+			expect(frontmatterOf(content).hero).toEqual({ title: '' })
+		})
+
+		test('a sibling holding the same text is not the field that gets written', () => {
+			const content = editFrontmatter('a: "Sleva #1 dlouhý text"\nb: Ahoj', 'a: "Sleva #1 dlouhý text"\nb: Ahoj', 'Ahoj', 'Sleva #1')
+			expect(frontmatterOf(content)).toEqual({ a: 'Sleva #1 dlouhý text', b: 'Sleva #1' })
+		})
+
+		test('a broken field elsewhere in the block does not switch the guard off', () => {
+			// The duplicate key is not what the edit touches, and must not degrade it.
+			const content = editFrontmatter('a: 1\na: 2\ntitle: Ahoj', 'title: Ahoj', 'Ahoj', 'Ahoj: světe')
+			expect(content).toContain('title: "Ahoj: světe"')
+		})
+
+		test('a BOM before the fence is still frontmatter', () => {
+			const result = applyTextChange(
+				'\uFEFF---\ntitle: Ahoj\n---\n\nBody.\n',
+				makeChange({ sourcePath: 'src/content/blog/a.md', sourceSnippet: 'title: Ahoj', originalValue: 'Ahoj', newValue: 'Ahoj: x' }),
+				emptyManifest,
+			)
+			if (!result.success) throw new Error(result.error)
+			expect(result.content).toContain('title: "Ahoj: x"')
+		})
+
+		test('a JSON array item is not rewritten as a YAML scalar', () => {
+			const json = '{\n  "tags": ["Ahoj", "B"]\n}\n'
+			const result = applyTextChange(
+				json,
+				makeChange({ sourcePath: 'src/content/team/a.json', sourceSnippet: '  "tags": ["Ahoj", "B"]', originalValue: 'Ahoj', newValue: 'Nový' }),
+				emptyManifest,
+			)
+			if (result.success) expect(() => JSON.parse(result.content)).not.toThrow()
+		})
+
+		test('a .yaml data file goes through the same path', () => {
+			const result = applyTextChange(
+				'title: Ahoj světe\n',
+				makeChange({ sourcePath: 'src/data/site.yaml', sourceSnippet: 'title: Ahoj světe', originalValue: 'Ahoj světe', newValue: 'Sleva #1' }),
+				emptyManifest,
+			)
+			expect(result).toEqual({ success: true, content: 'title: "Sleva #1"\n' })
+		})
 	})
 
 	describe('insertions at a markup seam stay outside the inline element', () => {
