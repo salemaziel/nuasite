@@ -17,7 +17,7 @@ import { isPlainObject, loadCollections, type LoadedEntry } from './check-entrie
 import { checkAgainstSchemas } from './check-live'
 import { checkFieldShapes } from './check-shape'
 import { checkEditorWrites } from './check-write'
-import { parseContentConfig, type ParsedCollection, type ParsedField } from './content-config-ast'
+import { classifyEmptyContentConfig, CONTENT_CONFIG_PATHS, parseContentConfig, type ParsedCollection, type ParsedField } from './content-config-ast'
 import type { CmsFileSystem } from './fs/types'
 import { type LiveSchemas, schemaFor } from './schema-port'
 import { computePathnameFromSpec } from './shared'
@@ -229,12 +229,20 @@ export async function checkContent(fs: CmsFileSystem, options: CheckContentOptio
 	const config = await parseContentConfig(fs, new Map())
 
 	if (config.size === 0) {
-		findings.push({
-			severity: 'error',
-			code: 'config/no-collections',
-			file: 'src/content.config.ts',
-			message: 'No collections found — the content config is missing, unreadable, or declares nothing.',
-		})
+		// A config that reads fine and declares nothing is a site without content collections. It
+		// builds, so by this function's own contract it is not an error — and reporting it as one
+		// blocked the publish of every such site and sent the agent chasing a defect that was not there.
+		const reason = await classifyEmptyContentConfig(fs)
+		if (reason !== 'no-collections') {
+			findings.push({
+				severity: 'error',
+				code: reason === 'missing' ? 'config/missing' : 'config/unreadable',
+				file: 'src/content.config.ts',
+				message: reason === 'missing'
+					? `No content config found — expected one of ${CONTENT_CONFIG_PATHS.join(' or ')}.`
+					: 'The content config could not be parsed.',
+			})
+		}
 		return { findings, collections: 0, entries: 0 }
 	}
 

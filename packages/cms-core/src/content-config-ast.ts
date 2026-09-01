@@ -236,6 +236,37 @@ function parseSource(source: string): t.File | null {
 	}
 }
 
+/** Where a project may keep its content config, in the order the parser prefers them. */
+export const CONTENT_CONFIG_PATHS = ['src/content/config.ts', 'src/content.config.ts'] as const
+
+/**
+ * Why `parseContentConfig` came back empty. Three different facts share that one return value, and
+ * only two of them are a defect: a site with no content collections is a legitimate site.
+ */
+export type EmptyContentConfigReason = 'missing' | 'unparseable' | 'no-collections'
+
+/**
+ * Tell the three apart, for a caller that has to report the empty map rather than just handle it.
+ *
+ * A parse failure anywhere wins over an empty parse: a config that will not read is a problem to
+ * name even when a second one beside it reads cleanly and declares nothing.
+ */
+export async function classifyEmptyContentConfig(fs: CmsFileSystem): Promise<EmptyContentConfigReason> {
+	let found = false
+	for (const configPath of CONTENT_CONFIG_PATHS) {
+		try {
+			await fs.stat(configPath)
+		} catch {
+			continue
+		}
+		found = true
+		if (parseSource(await fs.readFile(configPath)) === null) {
+			return 'unparseable'
+		}
+	}
+	return found ? 'no-collections' : 'missing'
+}
+
 /**
  * Parse the project's Astro content config file (TypeScript) into a structured
  * representation of each collection's schema. Returns an empty map if no config
@@ -243,7 +274,7 @@ function parseSource(source: string): t.File | null {
  * re-reading and re-parsing an unchanged config file.
  */
 export async function parseContentConfig(fs: CmsFileSystem, cache: ParseCache): Promise<ParsedConfig> {
-	for (const configPath of ['src/content/config.ts', 'src/content.config.ts']) {
+	for (const configPath of CONTENT_CONFIG_PATHS) {
 		let stat: Awaited<ReturnType<CmsFileSystem['stat']>>
 		try {
 			stat = await fs.stat(configPath)

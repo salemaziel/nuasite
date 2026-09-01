@@ -16,6 +16,9 @@ export { checkEditorWrites, type WriteCheckInput } from './check-write'
 export { scanCollections } from './collection-scanner'
 export { scanComponentDefinitions } from './component-registry'
 export {
+	classifyEmptyContentConfig,
+	CONTENT_CONFIG_PATHS,
+	type EmptyContentConfigReason,
 	type ParseCache,
 	parseConfigSource,
 	parseContentConfig,
