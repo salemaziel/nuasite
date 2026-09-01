@@ -159,7 +159,28 @@ export const collections = { people${extra ? ', articles' : ''} }
 		await write({ 'src/content/people/ada.md': '---\nname: Ada\n---\n' })
 
 		const report = await check()
-		expect(report.findings.map(f => f.code)).toEqual(['config/no-collections'])
+		expect(report.findings.map(f => f.code)).toEqual(['config/missing'])
+	})
+
+	// Errors are what fails the build. A site with no collections builds, so calling it an error
+	// refused to publish every static site and gave the agent a defect to chase that was not there.
+	test('a config that reads fine and declares no collections passes clean', async () => {
+		await write({
+			'src/content.config.ts': `import { defineCmsCollection, n } from '@nuasite/cms'
+export const collections = {}
+`,
+		})
+
+		const report = await check()
+		expect(report.findings).toEqual([])
+		expect(report.collections).toBe(0)
+	})
+
+	test('a config that will not parse is still an error, and says so', async () => {
+		await write({ 'src/content.config.ts': 'export const collections = {' })
+
+		const report = await check()
+		expect(report.findings.map(f => f.code)).toEqual(['config/unreadable'])
 	})
 
 	// An image field naming a file nobody ever uploaded builds green and renders a broken image.
